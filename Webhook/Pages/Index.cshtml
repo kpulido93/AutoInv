@@ -1,0 +1,29 @@
+@page
+@model Pages.IndexModel
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <title>Estado del Servicio - Webhooks</title>
+    <link rel="stylesheet" href="/css/status.css" />
+</head>
+
+<body>
+    <h1>Estado del Servicio</h1>
+    <p>Eventos Recibidos:</p>
+
+    @if (Model.Events.Count == 0)
+    {
+        <p>No se han recibido eventos aún.</p>
+    }
+    else
+    {
+        @foreach (var eventData in Model.Events)
+        {
+            <div class="event">
+                <pre>@eventData</pre>
+            </div>
+        }
+    }
+</body>
+</html>

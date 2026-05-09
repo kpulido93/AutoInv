@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Webhook Console</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/7.0.5/signalr.min.js"
+            integrity="sha384-s8+CNpBuEeVEfTVqWZOkbtyTlUIgveOeQBMAJvBBl3XZTo5T1kpo9dp/JR93eT6V"
+            crossorigin="anonymous"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+
+        #events {
+            border: 1px solid #ccc;
+            padding: 10px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .event {
+            margin-bottom: 10px;
+            padding: 5px;
+            border-bottom: 1px solid #ddd;
+        }
+    </style>
+</head>
+<body>
+    <h1>WhatsApp Webhook Console</h1>
+    <div id="status">Connecting...</div>
+    <div id="events"></div>
+
+    <script>
+        const statusDiv = document.getElementById("status");
+        const eventsDiv = document.getElementById("events");
+
+        const connection = new signalR.HubConnectionBuilder()
+            .withUrl("/eventhub")
+            .build();
+
+        connection.on("ReceiveEvent", (message) => {
+            const eventDiv = document.createElement("div");
+            eventDiv.classList.add("event");
+            eventDiv.textContent = message;
+            eventsDiv.appendChild(eventDiv);
+            eventsDiv.scrollTop = eventsDiv.scrollHeight;
+        });
+
+        (async () => {
+            try {
+                await connection.start();
+                statusDiv.textContent = "Connected";
+            } catch (err) {
+                statusDiv.textContent = "Connection failed";
+                console.error(err);
+            }
+        })();
+    </script>
+</body>
+</html>

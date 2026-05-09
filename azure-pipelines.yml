@@ -1,0 +1,237 @@
+trigger:
+  branches:
+    include:
+      - main
+      - master
+
+pool:
+  vmImage: 'windows-latest'
+
+variables:
+  BuildConfiguration: 'Release'
+  DotNetSdk6: '6.0.x'
+  DotNetSdk8: '8.0.x'
+
+stages:
+- stage: Quality
+  displayName: "Calidad (tests + Sonar + coverage)"
+  jobs:
+  - job: SonarAndTests
+    displayName: "SonarCloud + Unit Tests"
+    steps:
+    - checkout: self
+      fetchDepth: 0
+
+    - task: UseDotNet@2
+      displayName: "Use .NET SDK 8"
+      inputs:
+        packageType: 'sdk'
+        version: '$(DotNetSdk8)'
+
+    - task: UseDotNet@2
+      displayName: "Use .NET SDK 6"
+      inputs:
+        packageType: 'sdk'
+        version: '$(DotNetSdk6)'
+
+    # ===== SonarCloud =====
+    - task: SonarCloudPrepare@3
+      inputs:
+        SonarQube: 'SonarCloud Service Connection'
+        organization: 'mrbyte'
+        scannerMode: 'dotnet'
+        projectKey: 'mrbyte_Autoinventario'
+        projectName: 'mrbyte_Autoinventario'
+        extraProperties: |
+          sonar.cs.opencover.reportsPaths=$(Agent.TempDirectory)/**/coverage.opencover.xml
+          sonar.exclusions=**/bin/**, **/obj/**, **/*.g.cs, **/*.designer.cs, **/Lambda-Inventario/**
+
+    - script: |
+        dotnet restore AutoInventario.sln
+      displayName: "Restore"
+
+    - task: DotNetCoreCLI@2
+      displayName: "Test + Coverage (OpenCover)"
+      inputs:
+        command: test
+        projects: '**/*Tests/*.csproj'
+        arguments: >
+          -c $(BuildConfiguration)
+          --collect:"XPlat Code Coverage"
+          -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
+        publishTestResults: true
+
+    - task: SonarCloudAnalyze@3
+      displayName: "Run SonarCloud analysis"
+
+    - task: SonarCloudPublish@3
+      displayName: "Publish SonarCloud quality gate"
+      inputs:
+        pollingTimeoutSec: '300'
+
+- stage: Build
+  displayName: "Build (EXE + Web)"
+  dependsOn: Quality
+  condition: succeeded()
+  jobs:
+  - job: BuildArtifacts
+    displayName: "Publicar artefactos"
+    variables:
+      - group: VG_PfxPassword 
+    steps:
+    - checkout: self
+      fetchDepth: 0
+
+    - task: UseDotNet@2
+      displayName: "Use .NET SDK 8"
+      inputs:
+        packageType: 'sdk'
+        version: '$(DotNetSdk8)'
+
+    - task: UseDotNet@2
+      displayName: "Use .NET SDK 6"
+      inputs:
+        packageType: 'sdk'
+        version: '$(DotNetSdk6)'
+
+    - script: |
+        dotnet publish Autoinventario/AutoInventario.csproj -c $(BuildConfiguration) -r win-x64 --self-contained false -o "$(Build.ArtifactStagingDirectory)/agent"
+      displayName: "Publish Agent (win-x64)"
+
+    - script: |
+        dotnet publish AutoInventario.Updater/AutoInventario.Updater.csproj -c $(BuildConfiguration) -r win-x64 --self-contained false -o "$(Build.ArtifactStagingDirectory)/updater"
+      displayName: "Publish Updater (win-x64)"
+
+    - script: |
+        dotnet publish Webhook/Webhook-Inventario.csproj -c $(BuildConfiguration) -o "$(Build.ArtifactStagingDirectory)/webhook"
+      displayName: "Publish Webhook site"
+
+    - task: DownloadSecureFile@1
+      name: SignCert
+      displayName: "Download PFX (Secure File)"
+      inputs:
+        secureFile: "kevin.pfx"
+
+    - powershell: |
+        function Find-SignTool {
+          $kitsRoot = "${env:ProgramFiles(x86)}\Windows Kits\10\bin"
+          if (Test-Path $kitsRoot) {
+            $st = Get-ChildItem -Path $kitsRoot -Recurse -Filter signtool.exe -ErrorAction SilentlyContinue |
+              Where-Object { $_.FullName -match "\\x64\\signtool\.exe$" } |
+              Sort-Object FullName -Descending |
+              Select-Object -First 1
+            if ($st) { return $st.FullName }
+          }
+
+          $vsWhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          if (Test-Path $vsWhere) {
+            $vsPath = & $vsWhere -latest -products * -requires Microsoft.Component.MSBuild -property installationPath
+            if ($vsPath) {
+              $st = Get-ChildItem -Path $vsPath -Recurse -Filter signtool.exe -ErrorAction SilentlyContinue |
+                Where-Object { $_.FullName -match "\\x64\\signtool\.exe$" } |
+                Sort-Object FullName -Descending |
+                Select-Object -First 1
+              if ($st) { return $st.FullName }
+            }
+          }
+          return $null
+        }
+
+        $signtool = Find-SignTool
+        if (-not $signtool) { throw "signtool.exe no encontrado en el agente." }
+        Write-Host "Usando signtool: $signtool"
+
+        $pfxPath = "$(SignCert.secureFilePath)"
+        if (!(Test-Path $pfxPath)) { throw "PFX no encontrado: $pfxPath" }
+
+        # === Ubicaciones publicadas ===
+        $agentDir   = "$(Build.ArtifactStagingDirectory)\agent"
+        $updaterDir = "$(Build.ArtifactStagingDirectory)\updater"
+
+        # Ajusta estos nombres si tu exe se llama distinto
+        $agentExePath   = Join-Path $agentDir "AutoInventario.exe"
+        $updaterExePath = Join-Path $updaterDir "AutoInventario.Updater.exe"
+
+        if (!(Test-Path $agentExePath)) {
+          Write-Host "No se encontró AutoInventario.exe en $agentDir. EXEs disponibles:"
+          Get-ChildItem $agentDir -Filter *.exe -Recurse | Select-Object FullName
+          throw "Agent EXE no encontrado."
+        }
+
+        if (!(Test-Path $updaterExePath)) {
+          Write-Host "No se encontró AutoInventario.Updater.exe en $updaterDir. EXEs disponibles:"
+          Get-ChildItem $updaterDir -Filter *.exe -Recurse | Select-Object FullName
+          throw "Updater EXE no encontrado."
+        }
+
+        # === Firmar ambos ===
+        & $signtool sign /f "$pfxPath" /p "$env:PFX_PASSWORD" /tr "http://timestamp.sectigo.com" /td sha256 /fd sha256 "$agentExePath"
+        if ($LASTEXITCODE -ne 0) { throw "Falló firma Agent. ExitCode=$LASTEXITCODE" }
+
+        & $signtool sign /f "$pfxPath" /p "$env:PFX_PASSWORD" /tr "http://timestamp.sectigo.com" /td sha256 /fd sha256 "$updaterExePath"
+        if ($LASTEXITCODE -ne 0) { throw "Falló firma Updater. ExitCode=$LASTEXITCODE" }
+
+        # === Versión desde el EXE principal ===
+        $ver = (Get-Item $agentExePath).VersionInfo.FileVersion
+        if ([string]::IsNullOrWhiteSpace($ver)) { $ver = "0.0.0.0" }
+
+        # === Hashes ya firmados ===
+        $hashMain    = (Get-FileHash -Algorithm SHA256 $agentExePath).Hash.ToLowerInvariant()
+        $hashUpdater = (Get-FileHash -Algorithm SHA256 $updaterExePath).Hash.ToLowerInvariant()
+
+        # === Rutas destino en el sitio (wwwroot/updates) ===
+        $updatesRoot = "$(Build.ArtifactStagingDirectory)\webhook\wwwroot\updates"
+        $verDir      = Join-Path $updatesRoot $ver
+
+        New-Item -ItemType Directory -Force -Path $verDir     | Out-Null
+        New-Item -ItemType Directory -Force -Path $updatesRoot | Out-Null
+
+        # Copia:
+        # main => /updates/<ver>/AutoInventario.exe
+        Copy-Item -Force $agentExePath   (Join-Path $verDir "AutoInventario.exe")
+
+        # updater => /updates/AutoInventario.Updater.exe (raíz)
+        Copy-Item -Force $updaterExePath (Join-Path $updatesRoot "AutoInventario.Updater.exe")
+
+        # === Manifiesto con tu estructura ===
+        $baseUrl = "$env:baseURL"
+
+        $manifest = [ordered]@{
+          version = $ver
+          files = [ordered]@{
+            main    = "$baseUrl/updates/$ver/AutoInventario.exe"
+            updater = "$baseUrl/updates/AutoInventario.Updater.exe"
+          }
+          sha256 = [ordered]@{
+            main    = $hashMain
+            updater = $hashUpdater
+          }
+        }
+
+        $latestPath = Join-Path $updatesRoot "latest.json"
+        ($manifest | ConvertTo-Json -Depth 10) | Out-File -Encoding UTF8 $latestPath
+
+        Write-Host "latest.json generado en: $latestPath"
+        Get-Content $latestPath
+      displayName: "Sign + Publish to wwwroot/updates + Generate latest.json"
+      env:
+        PFX_PASSWORD: $(PfxPassword)
+        baseURL: $(baseURL)
+
+    - task: PublishPipelineArtifact@1
+      displayName: "Publish artifact: agent"
+      inputs:
+        targetPath: '$(Build.ArtifactStagingDirectory)/agent'
+        artifact: 'agent'
+
+    - task: PublishPipelineArtifact@1
+      displayName: "Publish artifact: updater"
+      inputs:
+        targetPath: '$(Build.ArtifactStagingDirectory)/updater'
+        artifact: 'updater'
+
+    - task: PublishPipelineArtifact@1
+      displayName: "Publish artifact: webhook"
+      inputs:
+        targetPath: '$(Build.ArtifactStagingDirectory)/webhook'
+        artifact: 'webhook'

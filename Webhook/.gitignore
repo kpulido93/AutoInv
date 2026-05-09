@@ -1,0 +1,49 @@
+# Visual Studio
+.vs/
+*.user
+*.suo
+
+# Build results
+bin/
+obj/
+
+# Rider / JetBrains
+.idea/
+
+# ASP.NET Core secrets
+secrets.json
+Webhook/Resources/private.key
+
+# Logs
+*.log
+
+# User-specific files
+*.userprefs
+
+# Dependency directories
+packages/
+node_modules/
+
+# NPM Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Env files
+.env
+.env.*
+
+# Configuration
+appsettings.Development.json
+
+# Others
+*.db
+*.sqlite
+*.pfx
+*.pem
+*.cer
+*.crt
+
+# System
+.DS_Store
+Thumbs.db
