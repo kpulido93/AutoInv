@@ -3,8 +3,10 @@
 public class UnitTest1
 {
     [Fact]
-    public void Test1()
+    public void Agent_project_embeds_public_key()
     {
+        string publicKey = AutoInventario.Services.CryptoService.LoadPublicKey();
 
+        Assert.Contains("BEGIN PUBLIC KEY", publicKey);
     }
 }

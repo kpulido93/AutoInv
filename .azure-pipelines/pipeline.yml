@@ -1,34 +1,164 @@
 trigger:
   branches:
     include:
+      - dev
+      - DEV
       - main
+      - master
+  paths:
+    include:
+      - Infraestructura-Terraform/**
+      - .azure-pipelines/pipeline.yml
+
+pr:
+  branches:
+    include:
+      - dev
+      - DEV
+      - main
+      - master
+  paths:
+    include:
+      - Infraestructura-Terraform/**
+      - .azure-pipelines/pipeline.yml
+
+variables:
+  TerraformVersion: '1.6.6'
+  PythonVersion: '3.12'
 
 stages:
-- stage: Deploy
-  displayName: 'Deploy AWS Infrastructure'
+- stage: TerraformValidate
+  displayName: "Terraform validate"
   jobs:
-  - job: Terraform_Apply
-    displayName: 'Terraform Apply'
+  - job: Validate
+    displayName: "Format and validate"
     pool:
       vmImage: 'ubuntu-latest'
     steps:
     - checkout: self
+      fetchDepth: 0
 
     - task: TerraformInstaller@1
+      displayName: "Use Terraform $(TerraformVersion)"
       inputs:
-        terraformVersion: '1.5.0'
+        terraformVersion: '$(TerraformVersion)'
 
-    - script: terraform init
-      displayName: 'Terraform Init'
+    - script: terraform -chdir=Infraestructura-Terraform fmt -check -recursive
+      displayName: "Terraform fmt check"
 
-    - script: terraform plan
-      displayName: 'Terraform Plan'
+    - script: terraform -chdir=Infraestructura-Terraform init -backend=false -input=false -no-color
+      displayName: "Terraform init without backend"
 
+    - script: terraform -chdir=Infraestructura-Terraform validate -no-color
+      displayName: "Terraform validate"
+
+- stage: TerraformPlan
+  displayName: "Terraform plan"
+  dependsOn: TerraformValidate
+  condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))
+  jobs:
+  - job: Plan
+    displayName: "Plan AWS infrastructure"
+    pool:
+      vmImage: 'ubuntu-latest'
+    steps:
+    - checkout: self
+      fetchDepth: 0
+
+    - task: TerraformInstaller@1
+      displayName: "Use Terraform $(TerraformVersion)"
+      inputs:
+        terraformVersion: '$(TerraformVersion)'
+
+    - task: UsePythonVersion@0
+      displayName: "Use Python $(PythonVersion)"
+      inputs:
+        versionSpec: '$(PythonVersion)'
+
+    - pwsh: >
+        ./scripts/ci/New-LambdaPackage.ps1
+        -Root "$(Build.SourcesDirectory)"
+        -OutputPath "$(Build.SourcesDirectory)/Infraestructura-Terraform/lambda_package.zip"
+      displayName: "Package Lambda for Terraform"
+
+    - script: terraform -chdir=Infraestructura-Terraform init -input=false -no-color
+      displayName: "Terraform init"
+      env:
+        AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
+        AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
+        AWS_SESSION_TOKEN: $(AWS_SESSION_TOKEN)
+
+    - script: terraform -chdir=Infraestructura-Terraform plan -input=false -no-color -out=tfplan
+      displayName: "Terraform plan"
+      env:
+        AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
+        AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
+        AWS_SESSION_TOKEN: $(AWS_SESSION_TOKEN)
+
+    - publish: Infraestructura-Terraform/tfplan
+      displayName: "Publish tfplan"
+      artifact: terraform-plan
+
+    - publish: Infraestructura-Terraform/lambda_package.zip
+      displayName: "Publish Lambda package"
+      artifact: terraform-lambda-package
+
+- stage: TerraformApply
+  displayName: "Terraform apply"
+  dependsOn: TerraformPlan
+  condition: and(succeeded(), eq(variables['Build.SourceBranchName'], 'main'))
+  jobs:
+  - job: WaitForApproval
+    displayName: "Manual approval"
+    pool: server
+    timeoutInMinutes: 1440
+    steps:
     - task: ManualValidation@0
+      timeoutInMinutes: 1440
       inputs:
-        notifyUsers: '["admin@example.com"]'
-        instructions: 'Por favor, revisa el plan antes de aplicar'
+        notifyUsers: ''
+        instructions: 'Review the Terraform plan artifact before applying.'
         onTimeout: 'reject'
 
-    - script: terraform apply -auto-approve
-      displayName: 'Terraform Apply'
+  - job: Apply
+    displayName: "Apply AWS infrastructure"
+    dependsOn: WaitForApproval
+    pool:
+      vmImage: 'ubuntu-latest'
+    steps:
+    - checkout: self
+      fetchDepth: 0
+
+    - task: TerraformInstaller@1
+      displayName: "Use Terraform $(TerraformVersion)"
+      inputs:
+        terraformVersion: '$(TerraformVersion)'
+
+    - download: current
+      artifact: terraform-plan
+      displayName: "Download tfplan"
+
+    - download: current
+      artifact: terraform-lambda-package
+      displayName: "Download Lambda package"
+
+    - pwsh: >
+        Copy-Item
+        -LiteralPath "$(Pipeline.Workspace)/terraform-lambda-package/lambda_package.zip"
+        -Destination "$(Build.SourcesDirectory)/Infraestructura-Terraform/lambda_package.zip"
+        -Force
+      displayName: "Restore Lambda package for apply"
+
+    - script: terraform -chdir=Infraestructura-Terraform init -input=false -no-color
+      displayName: "Terraform init"
+      env:
+        AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
+        AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
+        AWS_SESSION_TOKEN: $(AWS_SESSION_TOKEN)
+
+    - script: terraform -chdir=Infraestructura-Terraform apply -input=false -no-color "$(Pipeline.Workspace)/terraform-plan/tfplan"
+      displayName: "Terraform apply"
+      env:
+        AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
+        AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
+        AWS_SESSION_TOKEN: $(AWS_SESSION_TOKEN)

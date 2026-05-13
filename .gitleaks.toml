@@ -1,0 +1,53 @@
+title = "AutoInventario gitleaks configuration"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Repository-owned rule/config files and explicit placeholders"
+paths = [
+  '''^\.gitleaks\.toml$''',
+  '''^scripts/audit-local\.(ps1|sh)$''',
+]
+regexes = [
+  '''(?i)<[^>\r\n]+>''',
+  '''(?i)CHANGE_ME(_[A-Z0-9]+)*''',
+  '''(?i)set-with-secret-variable''',
+  '''(?i)set-via-(environment|user-secrets|secret-manager)''',
+  '''builder\.AppendLine\("-----BEGIN PRIVATE KEY-----"\)''',
+  '''builder\.AppendLine\("-----END PRIVATE KEY-----"\)''',
+]
+
+[[rules]]
+id = "autoinventario-private-key"
+description = "Private key material must not be committed"
+regex = '''-----BEGIN [A-Z ]*PRIVATE KEY-----'''
+tags = ["key", "private"]
+
+[[rules]]
+id = "autoinventario-aws-access-key"
+description = "AWS access key IDs must not be committed"
+regex = '''\b(AKIA|ASIA)[0-9A-Z]{16}\b'''
+tags = ["aws", "key"]
+
+[[rules]]
+id = "autoinventario-manageengine-token"
+description = "ManageEngine API tokens must not be committed"
+regex = '''(?i)(manageengine[_-]?(api[_-]?key|token)|authtoken)\s*[:=]\s*["']?([A-Za-z0-9_./+=-]{16,})'''
+secretGroup = 3
+tags = ["manageengine", "token"]
+
+[[rules]]
+id = "autoinventario-generic-secret-assignment"
+description = "Generic secret assignments must not contain real values"
+regex = '''(?i)(api[_-]?key|access[_-]?token|client[_-]?secret|password|passwd|pwd|secret)\s*[:=]\s*["']?([A-Za-z0-9_./+=-]{16,})'''
+secretGroup = 2
+entropy = 3.2
+tags = ["generic", "secret"]
+
+[[rules]]
+id = "autoinventario-connection-string-password"
+description = "Connection strings with passwords must not be committed"
+regex = '''(?i)(Host|Server|Data Source)=.+;(Password|Pwd)=([^;}\r\n]{8,})'''
+secretGroup = 3
+tags = ["database", "connection-string"]

@@ -3,12 +3,13 @@ using System.Net;
 using System.Net.NetworkInformation;
 using System.Runtime.Versioning;
 using System.Text.RegularExpressions;
-using Autoinventario.Models;
+using AutoInventario.Models;
+using AutoInventario.Services;
 using Microsoft.Win32;
 using Newtonsoft.Json;
 using Formatting = Newtonsoft.Json.Formatting;
 
-namespace Autoinventario
+namespace AutoInventario
 {
     [SupportedOSPlatform("windows")]
     public static class Systeminfo
@@ -16,6 +17,7 @@ namespace Autoinventario
         [SupportedOSPlatform("windows")]
         public static string GenerateWorkstationJson(string clientId)
         {
+            var isServer = WindowsServerInventoryService.IsWindowsServer();
             var workstation = new Workstation
             {
                 name = Environment.MachineName,
@@ -23,7 +25,10 @@ namespace Autoinventario
                 org_serial_number = GetBiosSerialNumber(),
                 manufacturer = GetSystemManufacturer(),
                 is_remote_control_prompt_enabled = IsRemoteControlPromptEnabled(),
-                is_server = IsServer(),
+                is_server = isServer,
+                server_inventory = WindowsServerInventoryService.GetServerInventory(
+                    isServer,
+                    Environment.GetEnvironmentVariable("AUTOINVENTARIO_SERVER_SERVICES")),
                 operating_system = GetOperatingSystemInfo(),
                 computer_system = GetComputerSystemInfo(),
                 product = new Product
@@ -107,20 +112,6 @@ namespace Autoinventario
             }
             return false;
 
-        }
-
-        private static bool IsServer()
-        {
-            using (var searcher = new ManagementObjectSearcher("SELECT ProductType FROM Win32_OperatingSystem"))
-            {
-                var os = searcher.Get().OfType<ManagementObject>().FirstOrDefault();
-                if (os != null)
-                {
-                    var productType = (uint)os["ProductType"];
-                    return productType != 1; // 1 = Workstation, 2 = Domain Controller, 3 = Server
-                }
-            }
-            return false;
         }
 
         private static OperatingSystemInfo GetOperatingSystemInfo() => new OperatingSystemInfo
@@ -283,12 +274,12 @@ namespace Autoinventario
                 udf_sline_6922 = GetPurchaseDate(),
                 udf_sline_7802 = DateTime.Now.ToString("yyyy-MM-dd HH:mm"),
                 udf_sline_6910 = GetWmiProperty("Win32_OperatingSystem", "Caption"),
-                udf_sline_7801 = GetRecoveryPassword(),
+                udf_sline_7801 = "No recopilado",
                 udf_sline_6909 = GetDeviceType(),
                 udf_sline_6917 = GetRAM(),
                 udf_sline_6916 = GetStorage(),
                 udf_sline_6919 = GetOfficeLicense(),
-                udf_sline_6918 = GetWindowsLicense()
+                udf_sline_6918 = "Detectado sin recopilar clave"
             };
         }
 
@@ -384,43 +375,7 @@ namespace Autoinventario
         [SupportedOSPlatform("windows")]
         public static string GetRecoveryPassword()
         {
-            try
-            {
-                var scope = new ManagementScope(@"\\.\root\CIMV2\Security\MicrosoftVolumeEncryption");
-                scope.Connect();
-
-                var searcher = new ManagementObjectSearcher(scope,
-                    new ObjectQuery("SELECT * FROM Win32_EncryptableVolume"));
-                var results = searcher.Get().Cast<ManagementObject>(); // ✔️ Corrige S3217
-
-                foreach (var volume in results)
-                {
-                    ManagementBaseObject outParams = volume.InvokeMethod("GetKeyProtectors", null, null);
-                    if (outParams != null && outParams["KeyProtectorIDs"] is string[] protectorIds)
-                    {
-                        foreach (string protectorId in protectorIds)
-                        {
-                            var inParams = volume.GetMethodParameters("GetKeyProtectorRecoveryPassword");
-                            inParams["KeyProtectorID"] = protectorId;
-
-                            var recoveryResult = volume.InvokeMethod("GetKeyProtectorRecoveryPassword", inParams, null);
-
-                            var recoveryPassword = recoveryResult?["RecoveryPassword"]?.ToString();
-                            if (!string.IsNullOrEmpty(recoveryPassword))
-                            {
-                                return recoveryPassword;
-                            }
-                        }
-                    }
-                }
-
-                return "No disponible";
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error al obtener la contraseña de recuperación: {ex.Message}");
-                return "No disponible";
-            }
+            return "No recopilado";
         }
 
         [SupportedOSPlatform("windows")]
@@ -539,17 +494,7 @@ namespace Autoinventario
         [SupportedOSPlatform("windows")]
         public static string GetWindowsLicense()
         {
-            try
-            {
-                var searcher = new ManagementObjectSearcher("SELECT OA3xOriginalProductKey FROM SoftwareLicensingService");
-                var obj = searcher.Get().Cast<ManagementObject>().FirstOrDefault();
-                return obj?["OA3xOriginalProductKey"]?.ToString() ?? "No disponible";
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error al obtener la licencia de Windows: {ex.Message}");
-                return "No disponible";
-            }
+            return "Detectado sin recopilar clave";
         }
 
         [SupportedOSPlatform("windows")]

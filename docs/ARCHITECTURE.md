@@ -2,7 +2,7 @@
 
 ## Objetivo
 
-AutoInventario automatiza la recogida de inventario de equipos Windows y mantiene workstations en ManageEngine ServiceDesk Plus. El diseno separa captura local, recepcion web, procesamiento serverless e infraestructura AWS.
+AutoInventario automatiza la recogida de inventario de equipos Windows y mantiene workstations en ManageEngine ServiceDesk Plus. El diseno separa captura local, recepcion web, procesamiento de inventario, conectores de activos e infraestructura opcional AWS.
 
 ## Flujo principal
 
@@ -10,21 +10,25 @@ AutoInventario automatiza la recogida de inventario de equipos Windows y mantien
 sequenceDiagram
     participant Agent as Agente Windows
     participant Webhook as Webhook ASP.NET
-    participant Lambda as Lambda Inventario
-    participant Secrets as AWS Secrets Manager
+    participant Worker as Worker Local
+    participant Secrets as Secret Store
     participant ME as ManageEngine
-    participant PG as PostgreSQL/S3/SSM
+    participant Lambda as Lambda opcional
 
     Agent->>Agent: Recopila inventario Windows
     Agent->>Agent: Serializa JSON
     Agent->>Agent: Cifra payload con AES y clave AES con RSA
     Agent->>Webhook: POST /webhooks
     Webhook->>Webhook: Valida formato y descifra si tiene clave privada local
-    Webhook->>Lambda: Invoke Lambda con payload cifrado
-    Lambda->>Secrets: Lee clave privada y token ManageEngine
-    Lambda->>Lambda: Descifra y normaliza workstation
-    Lambda->>PG: Consulta datos auxiliares para mapear workstation
-    Lambda->>ME: Crea o actualiza workstation
+    alt InventoryProcessing:Mode=Local
+        Webhook->>Worker: Normaliza workstation y valida clientID/serial
+        Worker->>Secrets: Lee token ManageEngine por ISecretProvider
+        Worker->>ME: Envia workstation por IAssetConnector
+    else InventoryProcessing:Mode=AwsLambda
+        Webhook->>Lambda: Invoke Lambda con payload cifrado
+        Lambda->>Secrets: Lee secretos externos
+        Lambda->>ME: Crea o actualiza workstation
+    end
 ```
 
 ## Agente Windows
@@ -76,8 +80,24 @@ Responsabilidades:
 - Exponer `GET /id-clients` para clientes disponibles.
 - Exponer `GET /updates/latest.json` y binarios bajo `wwwroot/updates`.
 - Aplicar cabeceras de seguridad.
-- Invocar Lambda con el evento cifrado.
+- Procesar inventario con `IInventoryProcessor`.
+- Ejecutar worker local con `IInventoryNormalizer`, `IAssetConnector` e `ISecretProvider`.
+- Invocar Lambda con el evento cifrado solo cuando `InventoryProcessing:Mode=AwsLambda`.
+- Validar licencias offline con `ILicenseValidator` para ediciones comerciales.
 - Mantener un store en memoria para ultimos eventos.
+
+Modo local:
+
+- `InventoryNormalizationService` replica las reglas minimas de la Lambda para limpiar nulos, puertos invalidos, discos y placeholders de BIOS/OEM.
+- `ManageEngineConnector` envia el payload normalizado al endpoint configurado de workstations.
+- `ConfigurationSecretProvider` obtiene el token desde `Secrets:<nombre>` o desde una variable de entorno con el nombre configurado.
+- Las interfaces permiten agregar otros conectores sin depender de AWS.
+
+Licenciamiento:
+
+- `Community/Internal` puede ejecutar sin licencia firmada.
+- `Professional` y `Enterprise` validan un archivo offline firmado con RSA-SHA256.
+- La validacion no requiere llamadas a servicios externos.
 
 Endpoints:
 
@@ -125,9 +145,11 @@ Brechas actuales:
 
 ## CI/CD
 
-`azure-pipelines.yml` contiene dos stages:
+`azure-pipelines.yml` contiene dos stages principales:
 
-- `Quality`: restore, tests, coverage y SonarCloud.
-- `Build`: publish agente/updater/webhook, firma de EXEs, copia a `wwwroot/updates`, genera `latest.json` y publica artefactos.
+- `ProductGates`: escaneo de secretos, escaneo NuGet vulnerable, build de solucion/proyectos, tests, compilacion Python y `terraform fmt`.
+- `Package`: publish agente/updater/webhook, firma de EXEs con Secure Files, copia a `wwwroot/updates`, genera `latest.json`, hashes SHA256 y publica artefactos.
 
-`.azure-pipelines/pipeline.yml` contiene despliegue Terraform con validacion manual antes de `terraform apply`.
+`.azure-pipelines/pipeline.yml` contiene validacion Terraform, plan y despliegue con aprobacion manual antes de `terraform apply`.
+
+Detalle operativo: `docs/CI-CD.md`.

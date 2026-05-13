@@ -1,0 +1,63 @@
+name: autoinventario
+
+services:
+  webhook:
+    build:
+      context: .
+      dockerfile: Webhook/Dockerfile
+    image: autoinventario-webhook:local
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "${WEBHOOK_HTTP_PORT:-8080}:8080"
+    environment:
+      ASPNETCORE_URLS: "http://+:8080"
+      ASPNETCORE_ENVIRONMENT: "Production"
+      DOTNET_ENVIRONMENT: "Production"
+      AutoInventario__ApiKey: "${AUTOINVENTARIO_API_KEY}"
+      Security__PrivateKeyPath: "/run/secrets/autoinventario_private_key"
+      InventoryProcessing__Mode: "${INVENTORY_PROCESSING_MODE:-Local}"
+      License__Edition: "${LICENSE_EDITION:-Community/Internal}"
+      License__LicenseFilePath: "${LICENSE_FILE_PATH:-}"
+      License__PublicKeyPath: "${LICENSE_PUBLIC_KEY_PATH:-}"
+      License__AllowUnsignedDevelopmentLicense: "${LICENSE_ALLOW_UNSIGNED_DEVELOPMENT:-true}"
+      ManageEngine__BaseUrl: "${MANAGEENGINE_BASE_URL}"
+      ManageEngine__WorkstationsPath: "${MANAGEENGINE_WORKSTATIONS_PATH:-/api/v3/workstations}"
+      ManageEngine__ApiTokenSecretName: "MANAGEENGINE_API_TOKEN"
+      ManageEngine__TimeoutSeconds: "${MANAGEENGINE_TIMEOUT_SECONDS:-10}"
+      MANAGEENGINE_API_TOKEN: "${MANAGEENGINE_API_TOKEN}"
+      ConnectionStrings__Postgres: "Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}"
+    volumes:
+      - type: bind
+        source: "${WEBHOOK_PRIVATE_KEY_PATH:-./secrets/private.key}"
+        target: /run/secrets/autoinventario_private_key
+        read_only: true
+      - webhook-updates:/app/wwwroot/updates
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: "${POSTGRES_DB}"
+      POSTGRES_USER: "${POSTGRES_USER}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+volumes:
+  postgres-data:
+  webhook-updates:

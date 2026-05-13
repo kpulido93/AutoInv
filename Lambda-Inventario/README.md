@@ -34,6 +34,21 @@ La configuracion Terraform debe usar `lambda_function.lambda_handler`.
 
 ## Evento esperado
 
+Formato actual autenticado:
+
+```json
+{
+  "clientID": "1",
+  "crypto_version": "2",
+  "ciphertext": "<payload cifrado base64>",
+  "encrypted_key": "<clave AES cifrada base64>",
+  "nonce": "<nonce base64>",
+  "tag": "<tag base64>"
+}
+```
+
+Formato legacy aceptado temporalmente:
+
 ```json
 {
   "clientID": "1",
@@ -42,6 +57,8 @@ La configuracion Terraform debe usar `lambda_function.lambda_handler`.
   "iv": "<iv base64>"
 }
 ```
+
+Ver `docs/CRYPTO.md` para el contrato criptografico y el plan de retirada del formato legacy.
 
 ## Despliegue manual
 

@@ -2,7 +2,7 @@ using System.Runtime.Versioning;
 
 using Newtonsoft.Json;
 
-namespace Autoinventario.Models
+namespace AutoInventario.Models
 {
     [SupportedOSPlatform("windows")]
     public class WorkstationInfo
@@ -28,6 +28,8 @@ namespace Autoinventario.Models
         public string? manufacturer { get; set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public bool? is_server { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public ServerInventory? server_inventory { get; set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public OperatingSystemInfo? operating_system { get; set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]

@@ -8,7 +8,7 @@ Eres un asistente tecnico senior para el proyecto AutoInventario.
 Contexto:
 - AutoInventario recopila inventario de equipos Windows, cifra el payload y lo envia a un Webhook ASP.NET Core.
 - El Webhook invoca una Lambda Python que descifra, normaliza y sincroniza datos con ManageEngine ServiceDesk Plus.
-- El repositorio incluye agente .NET 8, updater .NET 8, Webhook ASP.NET Core, Lambda Python 3.12, Terraform AWS y Azure Pipelines.
+- El repositorio incluye agente .NET 8, updater .NET 8, Webhook ASP.NET Core `net8.0`, Lambda Python 3.12, Terraform AWS y Azure Pipelines.
 
 Reglas de seguridad:
 - Nunca muestres ni copies secretos reales.
@@ -32,6 +32,7 @@ Comandos de validacion habituales:
 - `dotnet build AutoInventario.Updater\\AutoInventario.Updater.csproj -c Debug`
 - `dotnet build Webhook\\Webhook-Inventario.csproj -c Debug`
 - `dotnet test AutoInventario.Tests\\AutoInventario.Tests.csproj -c Debug`
+- `dotnet test Webhook.Tests\\Webhook.Tests.csproj -c Debug`
 - `python -m py_compile Lambda-Inventario\\lambda_function.py`
 - `terraform -chdir=Infraestructura-Terraform fmt -check -recursive`
 - `terraform -chdir=Infraestructura-Terraform validate -no-color`
@@ -40,7 +41,7 @@ Comandos de validacion habituales:
 
 Estado conocido del repositorio:
 - La solucion puede fallar si sigue apuntando a rutas antiguas de `Autoinventario/`.
-- El Webhook actual usa `net6.0` y debe migrarse a una version soportada.
+- El Webhook usa `net8.0`; mantenerlo en una version soportada y sin paquetes vulnerables.
 - Hay que tratar cualquier secreto previamente versionado como comprometido y rotarlo.
 - Los tests existentes pueden ser placeholder; no los trates como cobertura suficiente.
 

@@ -10,7 +10,7 @@ Mantener AutoInventario como una suite segura y operable para inventario Windows
 
 - Agente Windows: .NET 8, WinForms, WMI, registro, cifrado, tarea programada.
 - Updater: .NET 8, reemplazo seguro de `AutoInventario.exe`.
-- Webhook: ASP.NET Core, actualmente `net6.0`, endpoints `/webhooks`, `/id-clients`, `/updates/latest.json`.
+- Webhook: ASP.NET Core `net8.0`, endpoints `/webhooks`, `/id-clients`, `/updates/latest.json`.
 - Lambda: Python 3.12, descifrado y sincronizacion con ManageEngine.
 - Infraestructura: Terraform AWS.
 - CI/CD: Azure Pipelines con SonarCloud, firma de EXEs y artefactos.
@@ -36,6 +36,7 @@ dotnet build AutoInventario.csproj -c Debug
 dotnet build AutoInventario.Updater\AutoInventario.Updater.csproj -c Debug
 dotnet build Webhook\Webhook-Inventario.csproj -c Debug
 dotnet test AutoInventario.Tests\AutoInventario.Tests.csproj -c Debug
+dotnet test Webhook.Tests\Webhook.Tests.csproj -c Debug
 python -m py_compile Lambda-Inventario\lambda_function.py
 terraform -chdir=Infraestructura-Terraform fmt -check -recursive
 terraform -chdir=Infraestructura-Terraform validate -no-color
@@ -55,7 +56,7 @@ Si un comando falla por un problema preexistente, documenta el fallo exacto y ev
 
 ## Estructura canonica esperada
 
-Actualizar esta seccion cuando se resuelva la reubicacion del agente.
+La estructura canonica del agente es la raiz del repositorio.
 
 ```text
 AutoInventario.csproj

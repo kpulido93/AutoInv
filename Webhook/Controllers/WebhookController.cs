@@ -1,6 +1,4 @@
 using System;
-using System.IO;
-using System.Security.Cryptography;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Configuration;
 using Microsoft.AspNetCore.Mvc;
@@ -9,6 +7,7 @@ using Microsoft.Extensions.Logging;
 using Models;
 
 using Services;
+using Webhook.Services;
 
 namespace Controllers
 {
@@ -18,15 +17,21 @@ namespace Controllers
     {
         private const string VerifyToken = "YOUR_VERIFY_TOKEN";
         private readonly EventStore _eventStore;
+        private readonly IInventoryProcessor _inventoryProcessor;
+        private readonly IDecryptionService _decryptionService;
         private readonly ILogger<WebhookController> _logger;
-        private readonly IConfiguration _config;
-        private string? _cachedPrivateKey;
 
-        public WebhookController(EventStore eventStore, ILogger<WebhookController> logger, IConfiguration config)
+        public WebhookController(
+            EventStore eventStore,
+            IInventoryProcessor inventoryProcessor,
+            IDecryptionService decryptionService,
+            ILogger<WebhookController> logger,
+            IConfiguration config)
         {
             _eventStore = eventStore;
+            _inventoryProcessor = inventoryProcessor;
+            _decryptionService = decryptionService;
             _logger = logger;
-            _config = config;
         }
 
         [HttpGet]
@@ -34,7 +39,10 @@ namespace Controllers
                                     [FromQuery(Name = "hub.challenge")] string hub_challenge,
                                     [FromQuery(Name = "hub.verify_token")] string hub_verify_token)
         {
-            _logger.LogInformation("Verificación de Webhook recibida. Mode: {Mode}, Token: {Token}", hub_mode, hub_verify_token);
+            _logger.LogInformation(
+                "Verificación de Webhook recibida. Mode: {Mode}, Token presente: {HasToken}",
+                hub_mode,
+                !string.IsNullOrWhiteSpace(hub_verify_token));
 
             if (hub_mode == "subscribe" && hub_verify_token == VerifyToken)
             {
@@ -47,135 +55,92 @@ namespace Controllers
         }
 
         [HttpPost]
-        public async Task<IActionResult> HandleEvent(
-            [FromBody] WebhookEvent webhookEvent,
-            [FromHeader(Name = "x-api-key")] string apiKey)
+        public async Task<IActionResult> HandleEvent([FromBody] WebhookEvent webhookEvent)
         {
-            var secretKey = _config["Autoinventario:AWSKeyId"];
+            var correlationId = HttpContext.Items.TryGetValue("X-Correlation-ID", out var value)
+                ? value?.ToString()
+                : HttpContext.TraceIdentifier;
+            _logger.LogInformation("Solicitud POST recibida. CorrelationId: {CorrelationId}", correlationId);
 
-            _logger.LogInformation("Solicitud POST recibida. API Key: {ApiKey}", apiKey ?? "No enviada");
-
-            //if (apiKey != secretKey)
-            //{
-            //    _logger.LogWarning("Acceso no autorizado. API Key incorrecta.");
-            //    return Unauthorized("Acceso no autorizado.");
-            //}
-
-            if (webhookEvent == null || string.IsNullOrEmpty(webhookEvent.Data) ||
-                string.IsNullOrEmpty(webhookEvent.Key) || string.IsNullOrEmpty(webhookEvent.IV))
+            if (webhookEvent == null ||
+                string.IsNullOrWhiteSpace(webhookEvent.ClientID) ||
+                !HasEncryptedPayload(webhookEvent))
             {
-                _logger.LogError("Solicitud con formato inválido. Datos: {Data}, Key: {Key}, IV: {IV}",
-                                 webhookEvent?.Data ?? "NULL",
-                                 webhookEvent?.Key ?? "NULL",
-                                 webhookEvent?.IV ?? "NULL");
+                _logger.LogWarning(
+                    "Solicitud con formato inválido. HasClientId: {HasClientId}, CryptoVersion: {CryptoVersion}",
+                    !string.IsNullOrWhiteSpace(webhookEvent?.ClientID),
+                    webhookEvent?.CryptoVersion ?? "legacy");
                 return BadRequest("Formato inválido.");
             }
 
-            string decryptedData;
+            DecryptionResult decryptionResult;
             try
             {
-                _logger.LogInformation("Iniciando desencriptado de datos...");
-                decryptedData = DecryptData(webhookEvent.Data, webhookEvent.Key, webhookEvent.IV);
-                _logger.LogInformation("Datos desencriptados exitosamente.");
+                _logger.LogInformation("Iniciando desencriptado de datos. CryptoVersion: {CryptoVersion}", webhookEvent.CryptoVersion ?? "legacy");
+                decryptionResult = _decryptionService.Decrypt(webhookEvent);
+                _logger.LogInformation("Datos desencriptados exitosamente. CryptoVersion: {CryptoVersion}", decryptionResult.CryptoVersion);
             }
             catch (Exception ex)
             {
-                _logger.LogError("Error al desencriptar los datos: {Error}", ex.Message);
+                _logger.LogWarning(
+                    "Error al desencriptar los datos. ErrorType: {ErrorType}, CryptoVersion: {CryptoVersion}",
+                    ex.GetType().Name,
+                    webhookEvent.CryptoVersion ?? "legacy");
                 return BadRequest("No se pudo desencriptar los datos. Verifica la clave y el formato.");
             }
 
-            _eventStore.AddEvent(webhookEvent.ClientID, decryptedData);
+            _eventStore.AddEvent(webhookEvent.ClientID, decryptionResult.Plaintext);
             _logger.LogInformation("Evento guardado localmente.");
 
-            var lambdaInvoker = new LambdaInvoker();
-            await lambdaInvoker.InvokeLambdaAsync(new
+            var processingResult = await _inventoryProcessor.ProcessAsync(
+                new InventoryProcessingRequest(
+                    webhookEvent.ClientID,
+                    decryptionResult.CryptoVersion,
+                    GetEncryptedData(webhookEvent),
+                    GetEncryptedKey(webhookEvent),
+                    GetIvOrNonce(webhookEvent),
+                    webhookEvent.Tag ?? string.Empty,
+                    decryptionResult.Plaintext,
+                    correlationId),
+                HttpContext.RequestAborted);
+
+            _logger.LogInformation("Evento procesado correctamente.");
+            return Ok(processingResult.ResponseMessage);
+        }
+
+        private static bool HasEncryptedPayload(WebhookEvent webhookEvent)
+        {
+            if (string.Equals(webhookEvent.CryptoVersion, DecryptionService.CurrentCryptoVersion, StringComparison.OrdinalIgnoreCase))
             {
-                clientID = webhookEvent.ClientID,
-                data = webhookEvent.Data,
-                key = webhookEvent.Key,
-                iv = webhookEvent.IV
-            });
-
-            _logger.LogInformation("Evento enviado correctamente a Lambda.");
-            return Ok("Evento procesado correctamente y enviado a Lambda.");
-        }
-
-        private string ResolvePrivateKeyPath()
-        {
-            var path = Environment.GetEnvironmentVariable("WEBHOOK_PRIVATE_KEY_PATH");
-
-            if (string.IsNullOrWhiteSpace(path))
-                path = _config["Security:PrivateKeyPath"];
-
-            if (string.IsNullOrWhiteSpace(path))
-                path = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
-                    "mrbyte", "Webhook", "private.key"
-                );
-
-            return path;
-        }
-
-        private string LoadPrivateKey()
-        {
-            if (!string.IsNullOrWhiteSpace(_cachedPrivateKey))
-                return _cachedPrivateKey;
-
-            var path = ResolvePrivateKeyPath();
-
-            _logger.LogInformation("Cargando clave privada desde: {Path}", path);
-
-            if (string.IsNullOrWhiteSpace(path))
-                throw new InvalidOperationException("No hay ruta configurada para la clave privada.");
-
-            if (!System.IO.File.Exists(path))
-                throw new FileNotFoundException($"No se encontró private.key en: {path}", path);
-
-            _cachedPrivateKey = System.IO.File.ReadAllText(path);
-            _logger.LogInformation("Clave privada cargada correctamente.");
-
-            return _cachedPrivateKey;
-        }
-
-        private string DecryptData(string encryptedData, string encryptedKey, string ivBase64)
-        {
-            string privateKey = LoadPrivateKey();
-
-            _logger.LogInformation("Iniciando desencriptado con RSA y AES...");
-
-            byte[] encryptedAesKey = Convert.FromBase64String(encryptedKey);
-            byte[] iv = Convert.FromBase64String(ivBase64);
-            byte[] cipherText = Convert.FromBase64String(encryptedData);
-
-            byte[] aesKey;
-            try
-            {
-                using (RSA rsa = RSA.Create())
-                {
-                    rsa.ImportFromPem(privateKey.ToCharArray());
-                    aesKey = rsa.Decrypt(encryptedAesKey, RSAEncryptionPadding.OaepSHA256);
-                    _logger.LogInformation("Clave AES desencriptada con RSA.");
-                }
-
-                using (Aes aes = Aes.Create())
-                {
-                    aes.Key = aesKey;
-                    aes.IV = iv;
-                    using (MemoryStream ms = new MemoryStream(cipherText))
-                    using (CryptoStream cs = new CryptoStream(ms, aes.CreateDecryptor(), CryptoStreamMode.Read))
-                    using (StreamReader reader = new StreamReader(cs))
-                    {
-                        string decryptedText = reader.ReadToEnd();
-                        _logger.LogInformation("Datos desencriptados correctamente.");
-                        return decryptedText;
-                    }
-                }
+                return !string.IsNullOrWhiteSpace(webhookEvent.Ciphertext) &&
+                       !string.IsNullOrWhiteSpace(webhookEvent.EncryptedKey) &&
+                       !string.IsNullOrWhiteSpace(webhookEvent.Nonce) &&
+                       !string.IsNullOrWhiteSpace(webhookEvent.Tag);
             }
-            catch (Exception ex)
+
+            if (!string.IsNullOrWhiteSpace(webhookEvent.CryptoVersion))
             {
-                _logger.LogError("Error al desencriptar los datos: {Error}", ex.Message);
-                throw;
+                return false;
             }
+
+            return !string.IsNullOrWhiteSpace(webhookEvent.Data) &&
+                   !string.IsNullOrWhiteSpace(webhookEvent.Key) &&
+                   !string.IsNullOrWhiteSpace(webhookEvent.IV);
         }
+
+        private static string GetEncryptedData(WebhookEvent webhookEvent)
+            => string.Equals(webhookEvent.CryptoVersion, DecryptionService.CurrentCryptoVersion, StringComparison.OrdinalIgnoreCase)
+                ? webhookEvent.Ciphertext
+                : webhookEvent.Data;
+
+        private static string GetEncryptedKey(WebhookEvent webhookEvent)
+            => string.Equals(webhookEvent.CryptoVersion, DecryptionService.CurrentCryptoVersion, StringComparison.OrdinalIgnoreCase)
+                ? webhookEvent.EncryptedKey
+                : webhookEvent.Key;
+
+        private static string GetIvOrNonce(WebhookEvent webhookEvent)
+            => string.Equals(webhookEvent.CryptoVersion, DecryptionService.CurrentCryptoVersion, StringComparison.OrdinalIgnoreCase)
+                ? webhookEvent.Nonce
+                : webhookEvent.IV;
     }
 }

@@ -15,7 +15,7 @@ resource "aws_iam_role" "lambda_role" {
 
 resource "aws_iam_policy" "lambda_policy" {
   name = "lambda_secrets_access"
-  
+
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
@@ -37,8 +37,8 @@ resource "aws_lambda_function" "lambda_inventario" {
   runtime       = "python3.12"
   handler       = "lambda_function.handler"
 
-  filename         = "lambda_package.zip"
-  source_code_hash = filebase64sha256("lambda_package.zip")
+  filename         = var.lambda_package_path
+  source_code_hash = fileexists(var.lambda_package_path) ? filebase64sha256(var.lambda_package_path) : null
 
   environment {
     variables = {

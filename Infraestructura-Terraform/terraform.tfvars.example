@@ -1,0 +1,3 @@
+aws_region           = "us-east-1"
+lambda_function_name = "LambdaInventario"
+secrets_manager_name = "autoinventario/private_key"

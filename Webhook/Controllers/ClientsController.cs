@@ -28,7 +28,7 @@ namespace Webhook.Controllers
         {
             const string cacheKey = "clients_id_list_v1";
 
-            if (_cache.TryGetValue(cacheKey, out List<object>? cached) && cached != null)
+            if (_cache.TryGetValue(cacheKey, out List<object> cached) && cached != null)
                 return Ok(cached);
 
             var clients = new List<object>();

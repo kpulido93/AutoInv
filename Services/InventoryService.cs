@@ -15,12 +15,15 @@ namespace AutoInventario.Services
             string json = JsonSerializer.Serialize(doc.RootElement, new JsonSerializerOptions { WriteIndented = true });
 
             string publicKey = CryptoService.LoadPublicKey();
-            var (encryptedJson, encryptedKey, iv) = CryptoService.EncryptData(json, publicKey);
+            var encryptedPayload = CryptoService.EncryptAuthenticatedPayload(json, publicKey, clientID);
 
-            await SendDataToWebhook(clientID, encryptedJson, encryptedKey, iv, webhookUrl);
+            await SendDataToWebhook(clientID, encryptedPayload, webhookUrl);
         }
 
-        static async Task SendDataToWebhook(string clientID, string encryptedData, string encryptedKey, string iv, string webhookUrl)
+        static async Task SendDataToWebhook(
+            string clientID,
+            EncryptedInventoryPayload encryptedPayload,
+            string webhookUrl)
         {
             using (HttpClient client = new HttpClient())
             {
@@ -31,9 +34,11 @@ namespace AutoInventario.Services
                 var payload = new
                 {
                     clientID = clientID,
-                    data = encryptedData,
-                    key = encryptedKey,
-                    iv = iv
+                    crypto_version = encryptedPayload.CryptoVersion,
+                    ciphertext = encryptedPayload.Ciphertext,
+                    encrypted_key = encryptedPayload.EncryptedKey,
+                    nonce = encryptedPayload.Nonce,
+                    tag = encryptedPayload.Tag
                 };
 
                 string jsonPayload = JsonSerializer.Serialize(payload);

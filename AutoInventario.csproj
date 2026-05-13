@@ -2,39 +2,31 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <ApplicationIcon>Resources\logo.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Remove="Resources\**" />
-    <EmbeddedResource Remove="Resources\**" />
-    <None Remove="Resources\**" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <None Remove="Autoinventario\Resources\public.key" />
-    <None Remove="InventarioFinal 1.ps1" />
-    <None Remove="InventarioFinal.ps1" />
-    <None Remove="private.key" />
+    <Compile Remove="AutoInventario.Updater\**;AutoInventario.Tests\**;Webhook.Tests\**;Webhook\**;Lambda-Inventario\**;Infraestructura-Terraform\**;docs\**;scripts\**" />
+    <EmbeddedResource Remove="AutoInventario.Updater\**;AutoInventario.Tests\**;Webhook.Tests\**;Webhook\**;Lambda-Inventario\**;Infraestructura-Terraform\**;docs\**;scripts\**" />
+    <None Remove="AutoInventario.Updater\**;AutoInventario.Tests\**;Webhook.Tests\**;Webhook\**;Lambda-Inventario\**;Infraestructura-Terraform\**;docs\**;scripts\**" />
+    <None Remove="Resources\logo.ico;Resources\public.key" />
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="AWSSDK.Core" Version="3.7.402.29" />
-    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="8.0.3" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="8.0.4" />
     <PackageReference Include="System.Management" Version="9.0.3" />
+    <PackageReference Include="System.Resources.Extensions" Version="9.0.5" />
+    <PackageReference Include="TaskScheduler" Version="2.12.2" />
   </ItemGroup>
 
   <ItemGroup>
-    <EmbeddedResource Include="Autoinventario\Resources\public.key" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Folder Include="lambda\" />
-    <Folder Include=".azure-pipelines\" />
-    <Folder Include="Payload\" />
-    <Folder Include="Terraform\" />
+    <EmbeddedResource Include="Resources\public.key" LogicalName="AutoInventario.Resources.public.key" />
   </ItemGroup>
 
 </Project>

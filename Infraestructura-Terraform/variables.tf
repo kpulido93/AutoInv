@@ -9,3 +9,7 @@ variable "lambda_function_name" {
 variable "secrets_manager_name" {
   default = "autoinventario/private_key"
 }
+
+variable "lambda_package_path" {
+  default = "lambda_package.zip"
+}

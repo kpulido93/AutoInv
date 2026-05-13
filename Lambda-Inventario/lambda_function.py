@@ -193,10 +193,49 @@ def unpad(s):
     padding_len = s[-1]
     return s[:-padding_len]
 
-def decrypt_payload(payload):
+def build_associated_data(crypto_version, client_id):
+    return f"AutoInventario|{crypto_version}|{client_id}".encode("utf-8")
+
+def decrypt_payload(payload, client_id=None):
     private_key = get_private_key()
     if private_key is None:
         raise Exception("No se pudo obtener la clave privada")
+
+    if payload.get("crypto_version") == "2":
+        if not client_id:
+            raise ValueError("clientID no proporcionado para payload autenticado.")
+
+        encrypted_key_b64 = payload.get("encrypted_key")
+        ciphertext_b64 = payload.get("ciphertext")
+        nonce_b64 = payload.get("nonce") or payload.get("iv")
+        tag_b64 = payload.get("tag")
+
+        if not encrypted_key_b64 or not ciphertext_b64 or not nonce_b64 or not tag_b64:
+            raise ValueError("Faltan campos del payload autenticado.")
+
+        encrypted_key = base64.b64decode(encrypted_key_b64)
+        aes_key = private_key.decrypt(
+            encrypted_key,
+            padding.OAEP(
+                mgf=padding.MGF1(algorithm=hashes.SHA256()),
+                algorithm=hashes.SHA256(),
+                label=None
+            )
+        )
+
+        nonce = base64.b64decode(nonce_b64)
+        ciphertext = base64.b64decode(ciphertext_b64)
+        tag = base64.b64decode(tag_b64)
+        if len(nonce) != 12 or len(tag) != 16:
+            raise ValueError("Tamaño inválido de nonce o tag.")
+
+        cipher = AES.new(aes_key, AES.MODE_GCM, nonce=nonce)
+        cipher.update(build_associated_data("2", str(client_id)))
+        plaintext = cipher.decrypt_and_verify(ciphertext, tag)
+        return json.loads(plaintext.decode())
+
+    if payload.get("crypto_version"):
+        raise ValueError("crypto_version no soportada.")
     
     encrypted_key_b64 = payload.get("key")
     encrypted_key = base64.b64decode(encrypted_key_b64) if encrypted_key_b64 else None
@@ -255,16 +294,26 @@ def lambda_handler(event, context):
     if not api_key:
         logger.error("No se pudo obtener la API Key.")
         return {"statusCode": 500, "body": "Error obteniendo la API Key"}
+
+    client_id = event.get("clientID")
+    if not client_id:
+        logger.warning("clientID no proporcionado en el evento.")
+        return {"statusCode": 400, "body": "clientID no proporcionado"}
     
     headers = {"authtoken": api_key, "Content-Type": "application/x-www-form-urlencoded"}
     
     try:
         encrypted_payload = {
-            "data": event["data"],
-            "key": event["key"],
-            "iv": event["iv"]
+            "crypto_version": event.get("crypto_version"),
+            "data": event.get("data"),
+            "key": event.get("key"),
+            "iv": event.get("iv"),
+            "ciphertext": event.get("ciphertext"),
+            "encrypted_key": event.get("encrypted_key"),
+            "nonce": event.get("nonce"),
+            "tag": event.get("tag")
         }
-        decrypted_event = decrypt_payload(encrypted_payload)
+        decrypted_event = decrypt_payload(encrypted_payload, client_id=client_id)
         decrypted_event = replace_none_with_null(decrypted_event)
 
         workstation = decrypted_event.get("workstation", {})
@@ -289,11 +338,6 @@ def lambda_handler(event, context):
     if not serial_number:
         logger.warning("SerialNumber no proporcionado en el payload.")
         return {"statusCode": 400, "body": "SerialNumber no proporcionado"}
-    
-    client_id = event.get("clientID")
-    if not client_id:
-        logger.warning("clientID no proporcionado en el evento.")
-        return {"statusCode": 400, "body": "clientID no proporcionado"}
     
     try:
         client_id = int(client_id)

@@ -6,7 +6,7 @@ using System.Text;
 using Microsoft.Win32;
 using Microsoft.Win32.SafeHandles;
 
-namespace Autoinventario.ModelsUserSystem;
+namespace AutoInventario.ModelsUserSystem;
 
 //public static class ResponsibleResolver
 //{

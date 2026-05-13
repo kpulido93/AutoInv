@@ -2,27 +2,27 @@
 
 AutoInventario es una suite para recopilar inventario de equipos Windows, cifrar el payload localmente y sincronizarlo con ManageEngine ServiceDesk Plus a traves de un Webhook ASP.NET Core y una Lambda en AWS.
 
-## Estado auditado
+## Estado actual
 
-Auditoria realizada el 2026-05-09 sobre el arbol de trabajo local.
+La estructura canonica del agente es la raiz del repositorio. `AutoInventario.csproj`, `Program.cs`, `Helpers/`, `Models/`, `Services/` y `Resources/` pertenecen al agente Windows.
 
-El repositorio contiene una reubicacion incompleta del agente: Git marca como eliminada la carpeta historica `Autoinventario/` y aparecen archivos equivalentes sin seguimiento en la raiz (`Program.cs`, `Services/`, `Helpers/`, `Models/`, `Resources/`, etc.). Por ese motivo la solucion principal no compila hasta restaurar la ruta historica o actualizar referencias de solucion, proyectos, tests y pipeline.
+La solucion, los tests y el pipeline principal apuntan al proyecto raiz `AutoInventario.csproj`.
 
-Resumen de validaciones ejecutadas:
+Resumen de validaciones principales:
 
 | Validacion | Resultado |
 | --- | --- |
-| `dotnet build AutoInventario.sln -c Debug` | Falla: falta `AutoInventario/AutoInventario.csproj`. |
-| `dotnet build AutoInventario.csproj -c Debug` | Falla: recurso no texto requiere `System.Resources.Extensions`; tambien hay advertencia NU1603. |
+| `dotnet build AutoInventario.sln -c Debug` | Compila; pueden quedar warnings nullable del agente. |
+| `dotnet build AutoInventario.csproj -c Debug` | Compila con un warning nullable en `Helpers/UserSystemHelper.cs`. |
 | `dotnet build AutoInventario.Updater/AutoInventario.Updater.csproj -c Debug` | Correcto. |
-| `dotnet build Webhook/Webhook-Inventario.csproj -c Debug` | Correcto con avisos: `net6.0` sin soporte y nullable fuera de contexto. |
-| `dotnet test AutoInventario.Tests/AutoInventario.Tests.csproj -c Debug` | Pasa 1 test vacio; avisa que el proyecto referenciado no existe. |
+| `dotnet build Webhook/Webhook-Inventario.csproj -c Debug` | Correcto en `net8.0`, sin warnings. |
+| `dotnet test AutoInventario.Tests/AutoInventario.Tests.csproj -c Debug` | Correcto; referencia el proyecto raiz del agente. |
 | `python -m py_compile Lambda-Inventario/lambda_function.py` | Correcto. |
 | `terraform fmt -check -recursive` | Falla formato en `Infraestructura-Terraform/main.tf`. |
 | `terraform validate -no-color` | Falla porque falta inicializar el provider AWS con `terraform init`. |
-| `dotnet list package --vulnerable --include-transitive` | Vulnerabilidades transitivas en agente y Webhook. |
+| `dotnet list package --vulnerable --include-transitive` | Webhook sin vulnerabilidades reportadas; revisar agente por separado. |
 
-El informe completo esta en [docs/AUDIT.md](docs/AUDIT.md).
+Las auditorias historicas estan en [docs/AUDIT.md](docs/AUDIT.md) y [docs/AUDIT-CURRENT.md](docs/AUDIT-CURRENT.md).
 
 ## Arquitectura
 
@@ -45,16 +45,17 @@ Componentes principales:
 - Webhook: API ASP.NET Core que recibe eventos cifrados, expone clientes y manifiesto de actualizaciones.
 - Lambda: funcion Python que descifra, normaliza y crea/actualiza workstations en ManageEngine.
 - Terraform: definicion base de rol IAM, Secrets Manager y Lambda.
-- Azure Pipelines: restore, tests, SonarCloud, publish, firma de ejecutables y empaquetado del sitio Webhook.
+- Azure Pipelines: gates de producto, escaneo de secretos, escaneo NuGet, publish, firma de ejecutables y empaquetado del sitio Webhook.
 
 ## Estructura del repositorio
 
 | Ruta | Proposito |
 | --- | --- |
-| `AutoInventario.csproj` | Proyecto del agente en la raiz. Actualmente no esta alineado con la solucion. |
-| `Program.cs`, `Helpers/`, `Models/`, `Services/`, `Resources/` | Codigo del agente en el arbol de trabajo actual. |
+| `AutoInventario.csproj` | Proyecto canonico del agente en la raiz. |
+| `Program.cs`, `Helpers/`, `Models/`, `Services/`, `Resources/` | Codigo y recursos del agente Windows. |
 | `AutoInventario.Updater/` | Updater independiente del agente. |
 | `AutoInventario.Tests/` | Proyecto xUnit. Hoy contiene una prueba placeholder. |
+| `Webhook.Tests/` | Tests de seguridad y middleware del Webhook. |
 | `Webhook/` | API ASP.NET Core, pagina de estado, endpoints de clientes y actualizaciones. |
 | `Lambda-Inventario/` | Lambda Python, requirements y script de empaquetado/despliegue. |
 | `Infraestructura-Terraform/` | Infraestructura AWS declarativa. |
@@ -67,7 +68,7 @@ Componentes principales:
 
 - Windows para ejecutar y validar completamente el agente.
 - .NET SDK 8 para agente, updater y tests.
-- .NET SDK/runtime 6 para el Webhook actual.
+- .NET SDK/runtime 8 para el Webhook.
 - Python 3.12 para Lambda.
 - Terraform >= 1.5 para infraestructura.
 - AWS CLI configurado para despliegues Lambda/Terraform.
@@ -109,29 +110,28 @@ dotnet build AutoInventario.csproj -c Debug
 dotnet build AutoInventario.Updater\AutoInventario.Updater.csproj -c Debug
 dotnet build Webhook\Webhook-Inventario.csproj -c Debug
 dotnet test AutoInventario.Tests\AutoInventario.Tests.csproj -c Debug
+dotnet test Webhook.Tests\Webhook.Tests.csproj -c Debug
 python -m py_compile Lambda-Inventario\lambda_function.py
 terraform -chdir=Infraestructura-Terraform fmt -check -recursive
 terraform -chdir=Infraestructura-Terraform validate -no-color
 ```
 
-Antes de tratar el build como estable, resolver:
+Pendientes conocidos:
 
-- Rutas obsoletas hacia `Autoinventario/AutoInventario.csproj`.
-- Recurso publico embebido del agente.
-- Exclusion de subproyectos desde el proyecto raiz si se mantiene `AutoInventario.csproj` en la raiz.
-- Migracion del Webhook desde .NET 6 a una version soportada.
 - Tests reales para cifrado, serializacion, updater, endpoints y Lambda.
+- Warnings nullable restantes en el agente.
 
 ## Despliegue
 
 Pipeline principal:
 
-1. Restaura y prueba proyectos .NET.
-2. Ejecuta SonarCloud y coverage.
-3. Publica agente, updater y Webhook.
-4. Firma los ejecutables con PFX seguro de Azure DevOps.
-5. Copia artefactos de actualizacion a `wwwroot/updates`.
-6. Genera `latest.json` con version, URLs y hashes SHA256.
+1. Ejecuta gates de secretos, vulnerabilidades NuGet, builds, tests, Python compile y Terraform fmt.
+2. Publica agente, updater y Webhook.
+3. Firma los ejecutables con PFX de Azure DevOps Secure Files.
+4. Copia artefactos de actualizacion a `wwwroot/updates`.
+5. Genera `latest.json` y archivos SHA256.
+
+Detalle: `docs/CI-CD.md`.
 
 Lambda:
 

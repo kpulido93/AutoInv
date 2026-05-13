@@ -3,8 +3,17 @@ using System.Text;
 
 namespace AutoInventario.Services
 {
+    public sealed record EncryptedInventoryPayload(
+        string CryptoVersion,
+        string Ciphertext,
+        string EncryptedKey,
+        string Nonce,
+        string Tag);
+
     public static class CryptoService
     {
+        public const string CurrentCryptoVersion = "2";
+
         public static string LoadPublicKey()
         {
             using Stream? stream = typeof(Program).Assembly.GetManifestResourceStream("AutoInventario.Resources.public.key");
@@ -13,6 +22,38 @@ namespace AutoInventario.Services
 
             using StreamReader reader = new StreamReader(stream);
             return reader.ReadToEnd();
+        }
+
+        public static EncryptedInventoryPayload EncryptAuthenticatedPayload(
+            string plainText,
+            string publicKey,
+            string clientId)
+        {
+            var aesKey = RandomNumberGenerator.GetBytes(32);
+            var nonce = RandomNumberGenerator.GetBytes(12);
+            var tag = new byte[16];
+            var plaintextBytes = Encoding.UTF8.GetBytes(plainText);
+            var ciphertext = new byte[plaintextBytes.Length];
+            var associatedData = BuildAssociatedData(CurrentCryptoVersion, clientId);
+
+            using (var aesGcm = new AesGcm(aesKey, tag.Length))
+            {
+                aesGcm.Encrypt(nonce, plaintextBytes, ciphertext, tag, associatedData);
+            }
+
+            using var rsa = RSA.Create();
+            rsa.ImportFromPem(publicKey.ToCharArray());
+            var encryptedKey = rsa.Encrypt(aesKey, RSAEncryptionPadding.OaepSHA256);
+
+            CryptographicOperations.ZeroMemory(aesKey);
+            CryptographicOperations.ZeroMemory(plaintextBytes);
+
+            return new EncryptedInventoryPayload(
+                CurrentCryptoVersion,
+                Convert.ToBase64String(ciphertext),
+                Convert.ToBase64String(encryptedKey),
+                Convert.ToBase64String(nonce),
+                Convert.ToBase64String(tag));
         }
 
         public static (string EncryptedData, string EncryptedKey, string IV) EncryptData(string plainText, string publicKey)
@@ -47,5 +88,8 @@ namespace AutoInventario.Services
                 }
             }
         }
+
+        public static byte[] BuildAssociatedData(string cryptoVersion, string clientId)
+            => Encoding.UTF8.GetBytes($"AutoInventario|{cryptoVersion}|{clientId}");
     }
 }

@@ -9,7 +9,7 @@ git status --short --branch
 git diff --name-status
 ```
 
-El arbol auditado contiene cambios preexistentes: carpeta historica `Autoinventario/` eliminada, codigo equivalente sin seguimiento en la raiz y `Webhook/appsettings.json` modificado. No asumir que esos cambios son descartables.
+La estructura canonica del agente es la raiz del repositorio. No usar rutas antiguas bajo `Autoinventario/`; la solucion, los tests y el pipeline deben apuntar a `AutoInventario.csproj`.
 
 ## Build local
 
@@ -21,16 +21,17 @@ dotnet build AutoInventario.csproj -c Debug
 dotnet build AutoInventario.Updater\AutoInventario.Updater.csproj -c Debug
 dotnet build Webhook\Webhook-Inventario.csproj -c Debug
 dotnet test AutoInventario.Tests\AutoInventario.Tests.csproj -c Debug
+dotnet test Webhook.Tests\Webhook.Tests.csproj -c Debug
 python -m py_compile Lambda-Inventario\lambda_function.py
 ```
 
-Estado auditado:
+Estado esperado:
 
-- La solucion falla hasta corregir referencias a `Autoinventario/AutoInventario.csproj`.
-- El proyecto raiz del agente falla hasta corregir recursos/dependencias.
+- La solucion compila con `dotnet build AutoInventario.sln -c Debug`.
+- El proyecto raiz del agente compila con `dotnet build AutoInventario.csproj -c Debug`.
 - Updater compila.
-- Webhook compila con avisos.
-- Tests pasan solo porque contienen una prueba placeholder.
+- Webhook compila en `net8.0` sin warnings.
+- Tests referencian el proyecto raiz del agente.
 - Lambda pasa validacion de sintaxis.
 
 ## Seguridad de secretos
@@ -63,9 +64,15 @@ Configuracion esperada:
 - `ConnectionStrings__Postgres`
 - `AutoInventario__ApiKey`
 - `Security__PrivateKeyPath` o `WEBHOOK_PRIVATE_KEY_PATH`
-- `AWS_REGION`
-- `AUTOINVENTARIO_LAMBDA_NAME`
-- Credenciales AWS por rol, perfil o variables de entorno, no hard-codeadas.
+- `InventoryProcessing__Mode=Local` para ejecutar sin AWS.
+- `ManageEngine__BaseUrl` y `ManageEngine__WorkstationsPath` para el conector local.
+- `ManageEngine__ApiTokenSecretName` apuntando al nombre de variable/clave donde vive el token.
+- `InventoryProcessing__Mode=AwsLambda` solo cuando se quiera invocar Lambda.
+- `InventoryProcessing__AwsLambda__FunctionName` cuando el modo sea `AwsLambda`.
+- `InventoryProcessing__AwsLambda__Region`, `AWS_REGION` o `AWS_DEFAULT_REGION` cuando el entorno no aporte region al SDK.
+- Credenciales AWS por rol, perfil o variables de entorno seguras, no hard-codeadas.
+
+`AUTOINVENTARIO_LAMBDA_NAME` se mantiene como fallback temporal para despliegues antiguos, pero las nuevas configuraciones deben usar `InventoryProcessing__AwsLambda__FunctionName`.
 
 Endpoints de comprobacion:
 
