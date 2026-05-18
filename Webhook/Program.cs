@@ -27,6 +27,14 @@ namespace Webhook
                         $"{SecurityOptions.SectionName}:{nameof(SecurityOptions.PrivateKeyPath)}");
                     AddEnvironmentOverride(
                         overrides,
+                        "SECRET_PROVIDER_MODE",
+                        $"{SecretProviderOptions.SectionName}:{nameof(SecretProviderOptions.Mode)}");
+                    AddEnvironmentOverride(
+                        overrides,
+                        "SECRET_PROVIDER_FILE_BASE_PATH",
+                        $"{SecretProviderOptions.SectionName}:{nameof(SecretProviderOptions.File)}:{nameof(FileSecretProviderOptions.BasePath)}");
+                    AddEnvironmentOverride(
+                        overrides,
                         "AUTOINVENTARIO_LAMBDA_NAME",
                         $"{AwsOptions.SectionName}:{nameof(AwsOptions.FunctionName)}");
                     AddFirstAvailableEnvironmentOverride(

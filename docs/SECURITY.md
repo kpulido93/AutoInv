@@ -21,7 +21,14 @@ Para el Webhook en modo `AwsLambda`, no agregar `AccessKeyId`, `SecretAccessKey`
 - AWS Secrets Manager para secretos usados por Lambda o integraciones AWS.
 - Azure DevOps secret variables, Variable Groups, Secure Files y service connections para CI/CD.
 - Variables de entorno del host, `dotnet user-secrets` o store seguro del sistema para desarrollo local.
+- `SecretProvider:Mode=File` solo para desarrollo local controlado, con archivos fuera del repo y ACL restringidas al proceso/usuario del Webhook.
 - Windows Certificate Store, HSM o mecanismo corporativo equivalente para certificados y claves privadas.
+
+Regla operativa para el Webhook:
+
+- En produccion usar `SecretProvider:Mode=Environment` con variables protegidas o un store seguro del host.
+- `SecretProvider:Mode=File` no sustituye un secret store corporativo; existe solo para bootstrap y desarrollo local.
+- El proveedor `Environment` mantiene compatibilidad con `Secrets:<nombre>` en configuracion para despliegues existentes, pero no se deben agregar secretos reales a archivos versionados.
 
 ## Plantillas seguras
 

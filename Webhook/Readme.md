@@ -29,6 +29,8 @@ Claves esperadas:
 | `AutoInventario:VerifyToken` | Token esperado por `GET /webhooks` para la verificacion inicial del proveedor. |
 | `Security:PrivateKeyPath` | Ruta de clave privada local para descifrado. |
 | `WEBHOOK_PRIVATE_KEY_PATH` | Override por variable de entorno. |
+| `SecretProvider:Mode` | `Environment` para leer secretos desde variables protegidas; `File` solo para desarrollo local con archivos fuera del repo. |
+| `SecretProvider:File:BasePath` | Carpeta base del proveedor `File`. Cada secreto se resuelve como un archivo con el mismo nombre del secreto. |
 | `InventoryProcessing:Mode` | `Local` para levantar el Webhook sin AWS usando el stub inicial; `AwsLambda` para invocar Lambda y mantener el flujo actual. |
 | `InventoryProcessing:AwsLambda:FunctionName` | Nombre de la Lambda cuando el modo es `AwsLambda`. |
 | `InventoryProcessing:AwsLambda:Region` | Region AWS opcional para el cliente Lambda. Si se omite, se usa la cadena de configuracion del SDK. |
@@ -49,6 +51,7 @@ Opciones tipadas actuales:
 
 - `AutoInventarioOptions`: API key y verify token.
 - `SecurityOptions`: ruta efectiva de la clave privada.
+- `SecretProviderOptions`: seleccion del proveedor de secretos y carpeta base opcional para desarrollo local.
 - `ConnectionStringsOptions`: cadena `Postgres`.
 - `InventoryProcessingOptions` y `AwsOptions`: modo de procesamiento, Lambda name y region.
 
@@ -58,6 +61,8 @@ Variables de entorno recomendadas:
 - `AutoInventario__ApiKey`
 - `AutoInventario__VerifyToken`
 - `Security__PrivateKeyPath`
+- `SecretProvider__Mode`
+- `SecretProvider__File__BasePath`
 - `InventoryProcessing__Mode`
 - `InventoryProcessing__AwsLambda__FunctionName`
 - `InventoryProcessing__AwsLambda__Region`
@@ -65,8 +70,16 @@ Variables de entorno recomendadas:
 Compatibilidad legada mantenida:
 
 - `WEBHOOK_PRIVATE_KEY_PATH` sigue sobreescribiendo `Security:PrivateKeyPath`.
+- `SECRET_PROVIDER_MODE` y `SECRET_PROVIDER_FILE_BASE_PATH` se aceptan como aliases simples para desarrollo y bootstrap.
 - `AUTOINVENTARIO_LAMBDA_NAME` sigue poblando `InventoryProcessing:AwsLambda:FunctionName`.
 - `AWS_REGION` y `AWS_DEFAULT_REGION` siguen poblando `InventoryProcessing:AwsLambda:Region`.
+
+Resolucion actual de secretos:
+
+- `SecretProvider:Mode=Environment` busca primero una variable de entorno con el nombre solicitado.
+- Si esa variable no existe, el proveedor `Environment` mantiene compatibilidad con `Secrets:<nombre>` en configuracion.
+- `SecretProvider:Mode=File` lee un archivo fuera del repo ubicado en `SecretProvider:File:BasePath\<nombre-del-secreto>`.
+- Produccion debe usar variables protegidas, store seguro del host o un proveedor externo equivalente; `File` queda solo para desarrollo local controlado.
 
 Regla de credenciales AWS:
 
@@ -105,7 +118,7 @@ $env:InventoryProcessing__Mode = "Local"
 
 El ejemplo versionado deja `InventoryProcessing:Mode=Local` para facilitar un arranque inicial sin AWS. Si se omite el modo por completo, el runtime conserva `AwsLambda` como default temporal por compatibilidad.
 
-La futura sincronizacion local con ManageEngine seguira usando `Secrets:<ManageEngine:ApiTokenSecretName>` o una variable de entorno con ese nombre. No guardar tokens reales en archivos versionados.
+La futura sincronizacion local con ManageEngine seguira usando `ISecretProvider`. En `Environment` se resuelve por variable de entorno y luego por `Secrets:<ManageEngine:ApiTokenSecretName>` para compatibilidad. En `File`, el secreto debe vivir en un archivo local fuera del repo con ese mismo nombre. No guardar tokens reales en archivos versionados.
 
 ## Licenciamiento
 

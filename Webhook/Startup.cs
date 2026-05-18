@@ -84,11 +84,51 @@ namespace Webhook
                     _ => !HasForbiddenAwsCredentialConfiguration(_configuration.GetSection(AwsOptions.SectionName)),
                     "Do not configure AWS credentials under InventoryProcessing:AwsLambda. Use IAM Role, AWS SDK profiles, or the default credential chain.")
                 .ValidateOnStart();
+            services.AddOptions<SecretProviderOptions>()
+                .Bind(_configuration.GetSection(SecretProviderOptions.SectionName))
+                .Validate(options =>
+                {
+                    var mode = options.Mode?.Trim();
+                    return string.IsNullOrWhiteSpace(mode) ||
+                           string.Equals(mode, SecretProviderModes.Environment, StringComparison.OrdinalIgnoreCase) ||
+                           string.Equals(mode, SecretProviderModes.File, StringComparison.OrdinalIgnoreCase);
+                }, "SecretProvider:Mode must be Environment or File.")
+                .Validate(options =>
+                {
+                    if (!string.Equals(options.Mode, SecretProviderModes.File, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return true;
+                    }
+
+                    return !string.IsNullOrWhiteSpace(options.File.BasePath);
+                }, "SecretProvider:File:BasePath is required when SecretProvider:Mode is File.")
+                .ValidateOnStart();
             services.Configure<ManageEngineOptions>(
                 _configuration.GetSection(ManageEngineOptions.SectionName));
             services.Configure<LicenseOptions>(
                 _configuration.GetSection(LicenseOptions.SectionName));
-            services.AddSingleton<ISecretProvider, ConfigurationSecretProvider>();
+            services.AddSingleton<EnvironmentSecretProvider>();
+            services.AddSingleton<FileSecretProvider>();
+            services.AddSingleton<ISecretProvider>(serviceProvider =>
+            {
+                var options = serviceProvider.GetRequiredService<IOptions<SecretProviderOptions>>().Value;
+                var mode = string.IsNullOrWhiteSpace(options.Mode)
+                    ? SecretProviderModes.Environment
+                    : options.Mode.Trim();
+
+                if (string.Equals(mode, SecretProviderModes.File, StringComparison.OrdinalIgnoreCase))
+                {
+                    return serviceProvider.GetRequiredService<FileSecretProvider>();
+                }
+
+                if (string.Equals(mode, SecretProviderModes.Environment, StringComparison.OrdinalIgnoreCase))
+                {
+                    return serviceProvider.GetRequiredService<EnvironmentSecretProvider>();
+                }
+
+                throw new InvalidOperationException(
+                    $"Unsupported secret provider mode '{options.Mode}'. Use Environment or File.");
+            });
             services.AddSingleton<IDecryptionService, DecryptionService>();
             services.AddSingleton<ILicenseValidator, OfflineLicenseValidator>();
             services.AddHostedService<LicenseStartupValidationService>();
