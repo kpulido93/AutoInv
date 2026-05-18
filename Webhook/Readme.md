@@ -122,6 +122,10 @@ Rutas protegidas por API key:
 - `POST /webhooks`
 - `GET /id-clients`
 
+Ruta no protegida por API key:
+
+- `GET /webhooks` para la verificacion inicial del proveedor; usa `hub.verify_token` y se valida contra `AutoInventario:VerifyToken`.
+
 Header requerido:
 
 - `X-AutoInventario-Key: <api-key>`
@@ -172,16 +176,26 @@ Sin credencial:
 Invoke-WebRequest http://localhost:<puerto>/webhooks -Method Post -Body '{}' -ContentType 'application/json'
 ```
 
+Resultado esperado: `401 Unauthorized`.
+
 Credencial invalida:
 
 ```powershell
 Invoke-WebRequest http://localhost:<puerto>/webhooks -Method Post -Body '{}' -ContentType 'application/json' -Headers @{ "X-AutoInventario-Key" = "invalid" }
 ```
 
+Resultado esperado: `403 Forbidden`.
+
 Credencial valida:
 
 ```powershell
 Invoke-WebRequest http://localhost:<puerto>/webhooks -Method Post -Body '<payload-cifrado>' -ContentType 'application/json' -Headers @{ "X-AutoInventario-Key" = "<api-key>"; "X-Correlation-ID" = "<correlation-id>" }
+```
+
+Verificacion GET del proveedor:
+
+```powershell
+Invoke-WebRequest "http://localhost:<puerto>/webhooks?hub.mode=subscribe&hub.challenge=123&hub.verify_token=<verify-token>"
 ```
 
 ## Riesgos actuales

@@ -57,10 +57,7 @@ namespace Webhook.Services
 
             var path = context.Request.Path.Value ?? string.Empty;
 
-            bool needsKey =
-                path.Equals("/id-clients", StringComparison.OrdinalIgnoreCase) ||
-                path.Equals("/webhooks", StringComparison.OrdinalIgnoreCase) ||
-                path.StartsWith("/webhooks/", StringComparison.OrdinalIgnoreCase);
+            bool needsKey = RequiresApiKey(context.Request.Method, path);
 
             if (!needsKey)
             {
@@ -95,6 +92,22 @@ namespace Webhook.Services
             }
 
             await _next(context);
+        }
+
+        private static bool RequiresApiKey(string method, string path)
+        {
+            if (path.Equals("/id-clients", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            if (!HttpMethods.IsPost(method))
+            {
+                return false;
+            }
+
+            return path.Equals("/webhooks", StringComparison.OrdinalIgnoreCase) ||
+                   path.StartsWith("/webhooks/", StringComparison.OrdinalIgnoreCase);
         }
 
         private static string ResolveCorrelationId(HttpContext context)
