@@ -4,6 +4,10 @@
 
 AutoInventario automatiza la recogida de inventario de equipos Windows y mantiene workstations en ManageEngine ServiceDesk Plus. El diseno separa captura local, recepcion web, procesamiento de inventario, conectores de activos e infraestructura opcional AWS.
 
+## ADRs
+
+- [ADR 0001 - AWS optional self-hosted architecture](adr/0001-aws-optional-self-hosted-architecture.md): formaliza que AWS sigue soportado, pero deja de ser una dependencia obligatoria de arquitectura para el producto.
+
 ## Flujo principal
 
 ```mermaid
