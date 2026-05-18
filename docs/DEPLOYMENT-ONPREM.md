@@ -94,6 +94,8 @@ No se incluye base de datos en esta PoC. `GET /id-clients` no forma parte del es
 
 ## IIS en Windows Server
 
+La guia detallada de IIS vive en `docs/DEPLOYMENT-IIS.md`. Esta seccion deja solo el resumen operativo.
+
 Prerequisitos:
 
 - Windows Server con IIS.
