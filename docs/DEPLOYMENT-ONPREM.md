@@ -6,6 +6,7 @@ Este documento describe despliegues corporativos sin AWS para el Webhook de Auto
 
 | Variable | Uso | Secreta |
 | --- | --- | --- |
+| `ASPNETCORE_HTTP_PORTS` | Puerto HTTP interno del contenedor Docker. Default `8080`; se puede sobreescribir sin rebuild. | No |
 | `ASPNETCORE_URLS` | URL de escucha para Kestrel o contenedor. | No |
 | `AutoInventario__ApiKey` | API key requerida por `POST /webhooks` y `GET /id-clients`. | Si |
 | `Security__PrivateKeyPath` / `WEBHOOK_PRIVATE_KEY_PATH` | Ruta de la clave privada RSA fuera del repo. | Sensible |
@@ -27,6 +28,20 @@ El endpoint de salud es:
 ```text
 GET /health
 ```
+
+## Imagen Docker
+
+El `Webhook/Dockerfile` usa cuatro etapas explicitas: `restore`, `build`, `publish` y `runtime`, todas alineadas con .NET 8.
+
+Build recomendado:
+
+```powershell
+docker build -f Webhook\Dockerfile -t autoinventario-webhook:local .
+```
+
+La primera construccion necesita acceso de red a `mcr.microsoft.com` para descargar `mcr.microsoft.com/dotnet/sdk:8.0` y `mcr.microsoft.com/dotnet/aspnet:8.0` si no estan cacheadas en el host.
+
+La imagen no copia `appsettings.json` reales y espera configuracion por variables de entorno o archivos montados fuera del repo. El contenedor escucha por defecto en `8080`; para cambiar el puerto interno sin rebuild, sobreescribir `ASPNETCORE_HTTP_PORTS`.
 
 ## Docker Compose
 

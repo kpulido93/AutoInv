@@ -1,6 +1,9 @@
 .git/
 .vs/
 .vscode/
+**/*.user
+**/*.rsuser
+**/*.suo
 **/bin/
 **/obj/
 **/publish/
