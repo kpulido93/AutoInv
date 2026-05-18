@@ -314,7 +314,7 @@ public static class ResponsibleResolver
         return null;
     }
 
-    private static string OnlyDisplayNameOrUserPart(string accountOrDisplay)
+    private static string? OnlyDisplayNameOrUserPart(string accountOrDisplay)
     {
         var input = (accountOrDisplay ?? "").Trim();
         if (string.IsNullOrWhiteSpace(input)) return null;
