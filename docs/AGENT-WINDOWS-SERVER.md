@@ -41,7 +41,12 @@ Cuando `is_server=true`, el agente intenta agregar:
 - `server_inventory.roles_features`
 - `server_inventory.tracked_services`
 
-La lectura de roles/features usa `Win32_ServerFeature`. Si la clase no existe, el usuario no tiene permisos suficientes o WMI falla, el agente continua y reporta la lista vacia.
+La lectura de roles/features usa `Win32_ServerFeature` y captura solo:
+
+- `name`
+- `state`
+
+Actualmente `state` se serializa como `Installed` porque la clase WMI devuelve solo roles/features instalados. Si la clase no existe, el usuario no tiene permisos suficientes o WMI falla, el agente continua y reporta la lista vacia.
 
 ## Servicios Relevantes
 
@@ -67,6 +72,7 @@ Lecturas esperadas:
 - Lectura local de informacion de servicios.
 
 No se requieren permisos de administrador para todos los campos, pero algunos entornos endurecidos pueden bloquear WMI de roles/features. El agente debe continuar aunque esas lecturas fallen.
+Si la consulta falla, el log solo registra el tipo de error y sigue enviando el inventario basico sin `roles_features`.
 
 ## Seguridad
 
@@ -94,4 +100,5 @@ Prueba manual recomendada en Windows Server 2019/2022/2025:
 2. Configurar `AUTOINVENTARIO_SERVER_SERVICES` si se quieren servicios concretos.
 3. Ejecutar el agente.
 4. Verificar que el JSON descifrado contiene `workstation.is_server=true`.
-5. Verificar que `server_inventory` incluye OS, dominio/workgroup, uptime y listas vacias o pobladas segun permisos.
+5. Verificar que `server_inventory` incluye OS, dominio/workgroup, uptime y `roles_features` con `name/state` cuando WMI responde.
+6. Si WMI no devuelve roles/features, verificar que el inventario sigue saliendo con `is_server=true` y sin fallo total.

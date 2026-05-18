@@ -33,6 +33,29 @@ public class WindowsServerInventoryTests
     }
 
     [Fact]
+    public void GetServerInventory_returns_null_for_workstation_payloads()
+    {
+        Assert.Null(WindowsServerInventoryService.GetServerInventory(false));
+    }
+
+    [Fact]
+    public void CreateInstalledRoleFeature_returns_name_and_installed_state()
+    {
+        var feature = WindowsServerInventoryService.CreateInstalledRoleFeature("Web Server (IIS)");
+
+        Assert.NotNull(feature);
+        Assert.Equal("Web Server (IIS)", feature!.name);
+        Assert.Equal("Installed", feature.state);
+        Assert.Null(feature.id);
+    }
+
+    [Fact]
+    public void CreateInstalledRoleFeature_ignores_blank_names()
+    {
+        Assert.Null(WindowsServerInventoryService.CreateInstalledRoleFeature("  "));
+    }
+
+    [Fact]
     public void Workstation_serialization_includes_server_inventory_when_server()
     {
         var payload = new WorkstationInfo
@@ -61,7 +84,7 @@ public class WindowsServerInventoryTests
                     uptime_seconds = 3600,
                     roles_features = new List<ServerRoleFeature>
                     {
-                        new() { id = "Web-Server", name = "Web Server (IIS)" }
+                        new() { name = "Web Server (IIS)", state = "Installed" }
                     },
                     tracked_services = new List<TrackedWindowsService>
                     {
@@ -89,6 +112,8 @@ public class WindowsServerInventoryTests
         Assert.Equal("Microsoft Windows Server 2022 Standard", workstation["operating_system"]!.Value<string>("os"));
         Assert.Equal("20348", workstation["server_inventory"]!.Value<string>("os_build"));
         Assert.Equal("corp.example", workstation["server_inventory"]!.Value<string>("domain"));
+        Assert.Equal("Web Server (IIS)", workstation["server_inventory"]!["roles_features"]![0]!.Value<string>("name"));
+        Assert.Equal("Installed", workstation["server_inventory"]!["roles_features"]![0]!.Value<string>("state"));
         Assert.Equal("W3SVC", workstation["server_inventory"]!["tracked_services"]![0]!.Value<string>("name"));
     }
 
