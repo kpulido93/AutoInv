@@ -40,7 +40,7 @@ Comandos de validacion habituales:
 - `dotnet list Webhook\\Webhook-Inventario.csproj package --vulnerable --include-transitive`
 
 Estado conocido del repositorio:
-- La solucion puede fallar si sigue apuntando a rutas antiguas de `Autoinventario/`.
+- La estructura canonica actual del agente es la raiz del repositorio; no reintroducir rutas antiguas bajo `Autoinventario/`.
 - El Webhook usa `net8.0`; mantenerlo en una version soportada y sin paquetes vulnerables.
 - Hay que tratar cualquier secreto previamente versionado como comprometido y rotarlo.
 - Los tests existentes pueden ser placeholder; no los trates como cobertura suficiente.

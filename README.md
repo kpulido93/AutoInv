@@ -12,8 +12,8 @@ Resumen de validaciones principales:
 
 | Validacion | Resultado |
 | --- | --- |
-| `dotnet build AutoInventario.sln -c Debug` | Compila; pueden quedar warnings nullable del agente. |
-| `dotnet build AutoInventario.csproj -c Debug` | Compila con un warning nullable en `Helpers/UserSystemHelper.cs`. |
+| `dotnet build AutoInventario.sln -c Debug` | Correcto; `0` warnings y `0` errores. |
+| `dotnet build AutoInventario.csproj -c Debug` | Correcto; `0` warnings y `0` errores. |
 | `dotnet build AutoInventario.Updater/AutoInventario.Updater.csproj -c Debug` | Correcto. |
 | `dotnet build Webhook/Webhook-Inventario.csproj -c Debug` | Correcto en `net8.0`, sin warnings. |
 | `dotnet test AutoInventario.Tests/AutoInventario.Tests.csproj -c Debug` | Correcto; referencia el proyecto raiz del agente. |
@@ -54,7 +54,7 @@ Componentes principales:
 | `AutoInventario.csproj` | Proyecto canonico del agente en la raiz. |
 | `Program.cs`, `Helpers/`, `Models/`, `Services/`, `Resources/` | Codigo y recursos del agente Windows. |
 | `AutoInventario.Updater/` | Updater independiente del agente. |
-| `AutoInventario.Tests/` | Proyecto xUnit. Hoy contiene una prueba placeholder. |
+| `AutoInventario.Tests/` | Proyecto xUnit con pruebas minimas reales para recursos embebidos, cifrado y helpers puros. |
 | `Webhook.Tests/` | Tests de seguridad y middleware del Webhook. |
 | `Webhook/` | API ASP.NET Core, pagina de estado, endpoints de clientes y actualizaciones. |
 | `Lambda-Inventario/` | Lambda Python, requirements y script de empaquetado/despliegue. |
@@ -119,7 +119,6 @@ terraform -chdir=Infraestructura-Terraform validate -no-color
 Pendientes conocidos:
 
 - Tests reales para cifrado, serializacion, updater, endpoints y Lambda.
-- Warnings nullable restantes en el agente.
 
 ## Despliegue
 
