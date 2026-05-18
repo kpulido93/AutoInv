@@ -364,14 +364,17 @@ FodyWeavers.xsd
 
 # AutoInventario - secretos, configuracion local y artefactos generados
 **/appsettings.json
-**/appsettings.*.json
+**/appsettings.Development.json
+**/appsettings.Local.json
 !**/appsettings.example.json
 !**/appsettings.*.example.json
 **/secrets.json
 **/*.secrets.json
+!**/secrets.example.json
 **/private.key
 **/private.ppk
 **/*.private.key
+**/*.key
 **/*.pem
 **/*.pfx
 **/*.p12
@@ -379,6 +382,7 @@ FodyWeavers.xsd
 **/*.crt
 **/*.csr
 **/*.der
+!Resources/public.key
 .env
 .env.*
 !.env.example
@@ -386,8 +390,11 @@ FodyWeavers.xsd
 *.tfvars.json
 *.tfstate
 *.tfstate.*
+!**/terraform.tfvars.example
 **/.terraform/
 **/terraform.tfstate.d/
+coverage/
+TestResults/
 crash.log
 *.zip
 InventarioFinal*.ps1
