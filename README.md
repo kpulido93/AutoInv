@@ -154,6 +154,8 @@ Revisar [docs/OPERATIONS.md](docs/OPERATIONS.md) antes de desplegar.
 ## Guias
 
 - Soporte del agente en Windows Server: [docs/AGENT-WINDOWS-SERVER.md](docs/AGENT-WINDOWS-SERVER.md)
+- Posicionamiento comercial self-hosted: [docs/PRODUCT.md](docs/PRODUCT.md)
+- Modelo comercial y pricing: [docs/PRICING-MODEL.md](docs/PRICING-MODEL.md)
 
 ## Seguridad
 
