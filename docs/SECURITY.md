@@ -50,6 +50,18 @@ powershell -ExecutionPolicy Bypass -File scripts/ci/Invoke-SecretScan.ps1
 
 Las plantillas `.example` y la documentacion no se allowlistean por ruta completa para evitar silenciar secretos reales pegados por accidente. El escaneo debe reportar rutas y tipos sin imprimir valores reales.
 
+## Redaccion de logs
+
+Los logs operativos deben ser utiles sin exponer secretos, payloads completos ni datos personales sensibles.
+
+Reglas minimas:
+
+- No registrar API keys, tokens, `authtoken`, connection strings, PEM/PFX, claves privadas ni passwords.
+- No registrar payloads completos cifrados o descifrados, respuestas completas de integraciones ni `BitLocker recovery passwords`.
+- Sustituir contenido sensible por `correlation_id`, `statusCode`, longitud del cuerpo, `error type` o una huella corta no reversible cuando haga falta correlacion.
+- Si una excepcion puede contener configuracion o datos de usuario, registrar el tipo de error y un detalle saneado, no el valor literal.
+- Mantener la misma politica para logs locales, consola, tickets automaticos y cualquier canal de diagnostico externo.
+
 ## Respuesta ante exposicion
 
 1. No copiar el valor a issues, PRs, chats, correos ni documentacion.

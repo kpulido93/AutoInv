@@ -5,6 +5,7 @@ import base64
 import time
 import logging
 import re
+import hashlib
 from botocore.exceptions import BotoCoreError, NoCredentialsError, ClientError
 from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.hazmat.primitives.asymmetric import padding
@@ -13,6 +14,59 @@ from datetime import datetime
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
+
+
+def redact_text(value, max_length=240):
+    if value is None:
+        return "n/a"
+
+    text = str(value)
+    text = re.sub(r"-----BEGIN [^-]+-----.*?-----END [^-]+-----", "[REDACTED_PEM_BLOCK]", text, flags=re.DOTALL)
+    text = re.sub(
+        r'(?i)("?(?:api[_ -]?key|authtoken|token|password|secret|connectionstring|ciphertext|encrypted_key|nonce|iv|tag|data|payload|private_key|bitlocker_recovery_key)"?\s*:\s*)"[^"]*"',
+        r'\1"[REDACTED]"',
+        text,
+    )
+    text = re.sub(
+        r'(?i)((?:api[_ -]?key|authtoken|token|password|secret|connectionstring|ciphertext|encrypted_key|nonce|iv|tag|data|payload|private[_ -]?key|bitlocker(?:[_ -]?recovery[_ -]?key)?)\s*[:=]\s*)([^\s,;]+)',
+        r"\1[REDACTED]",
+        text,
+    )
+    text = re.sub(r"\b\d{6}(?:-\d{6}){7}\b", "[REDACTED_BITLOCKER_RECOVERY_KEY]", text)
+
+    if len(text) > max_length:
+        text = text[:max_length] + "...[truncated]"
+
+    return text
+
+
+def describe_text(value):
+    if value is None:
+        return "length=0"
+
+    text = str(value)
+    digest = hashlib.sha256(text.encode("utf-8")).hexdigest()[:12]
+    return f"length={len(text)}, sha256={digest}"
+
+
+def build_asset_reference(hostname=None, serial_number=None):
+    parts = [str(part).strip() for part in (hostname, serial_number) if part]
+    if not parts:
+        return "unknown"
+
+    material = "|".join(parts)
+    return hashlib.sha256(material.encode("utf-8")).hexdigest()[:12]
+
+
+def summarize_workstation_payload(workstation):
+    if not isinstance(workstation, dict):
+        return "root_fields=0, workstation_fields=0"
+
+    nested_workstation = workstation.get("workstation")
+    workstation_object = nested_workstation if isinstance(nested_workstation, dict) else workstation
+    root_fields = len(workstation.keys())
+    workstation_fields = len(workstation_object.keys()) if isinstance(workstation_object, dict) else 0
+    return f"root_fields={root_fields}, workstation_fields={workstation_fields}"
 
 def replace_none_with_null(obj):
     """Recursivamente elimina claves con valores `None` en todo el JSON"""
@@ -96,14 +150,25 @@ def get_api_key():
         response = client.get_secret_value(SecretId=secret_name)
         return response["SecretString"]
     except (BotoCoreError, NoCredentialsError, ClientError) as e:
-        logger.error(f"Error obteniendo la API Key: {str(e)}")
+        logger.error(
+            "Error obteniendo la API key de ManageEngine. ErrorType=%s Detail=%s",
+            type(e).__name__,
+            redact_text(str(e)),
+        )
         return None
 
-def report_failure_request(error_message, hostname=None, serial_number=None, workstation=None):
+
+def report_failure_request(error_message, hostname=None, serial_number=None, workstation=None, correlation_id=None):
     url = "https://soporte.stillion.tech/api/v3/requests"
     api_key = get_api_key()
+    asset_reference = build_asset_reference(hostname, serial_number)
+    workstation_summary = summarize_workstation_payload(workstation)
     if not api_key:
-        logger.error("No se pudo obtener la API Key para reportar error.")
+        logger.error(
+            "No se pudo obtener la API key para reportar error. CorrelationId=%s AssetRef=%s",
+            correlation_id or "n/a",
+            asset_reference,
+        )
         return
 
     headers = {
@@ -112,13 +177,16 @@ def report_failure_request(error_message, hostname=None, serial_number=None, wor
     }
 
     descripcion = f"Error en Lambda al procesar workstation.\n\n" \
-                  f"Hostname: {hostname or 'No disponible'}\n" \
-                  f"Serial: {serial_number or 'No disponible'}\n" \
-                  f"Mensaje de error: {error_message}\n" \
+                  f"CorrelationId: {correlation_id or 'n/a'}\n" \
+                  f"AssetRef: {asset_reference}\n" \
+                  f"Hostname disponible: {'si' if hostname else 'no'}\n" \
+                  f"Serial disponible: {'si' if serial_number else 'no'}\n" \
+                  f"Resumen workstation: {workstation_summary}\n" \
+                  f"Mensaje de error: {redact_text(error_message)}\n" \
                   f"Timestamp: {datetime.utcnow().isoformat()}Z\n" \
-                  f"{workstation}"
+                  f"Detalle adicional: payload redactado por politica de seguridad."
     
-    subject_value = f"AutoInventario | Error al procesar equipo {hostname or serial_number or 'desconocido'}"
+    subject_value = f"AutoInventario | Error al procesar equipo ref={asset_reference}"
 
     request_data = {
         "request": {
@@ -141,11 +209,28 @@ def report_failure_request(error_message, hostname=None, serial_number=None, wor
             timeout=5
         )
         if r.status_code not in [200, 201]:
-            logger.error(f"Fallo al crear request: {r.status_code} - {r.text}")
+            logger.error(
+                "Fallo al crear request de error. StatusCode=%s Response=%s CorrelationId=%s AssetRef=%s",
+                r.status_code,
+                describe_text(r.text),
+                correlation_id or "n/a",
+                asset_reference,
+            )
         else:
-            logger.info(f"Request creado para error: {hostname}")
+            logger.info(
+                "Request de error creado. StatusCode=%s CorrelationId=%s AssetRef=%s",
+                r.status_code,
+                correlation_id or "n/a",
+                asset_reference,
+            )
     except requests.exceptions.RequestException as e:
-        logger.error(f"No se pudo enviar request de error: {str(e)}")
+        logger.error(
+            "No se pudo enviar request de error. ErrorType=%s Detail=%s CorrelationId=%s AssetRef=%s",
+            type(e).__name__,
+            redact_text(str(e)),
+            correlation_id or "n/a",
+            asset_reference,
+        )
 
 def get_postgres_data():
     bucket_name = "s-autoinventario"
@@ -172,7 +257,11 @@ def get_postgres_data():
         json_data = json.loads(content)
         return json_data
     except (BotoCoreError, NoCredentialsError, json.JSONDecodeError, ClientError) as e:
-        logger.error(f"Error leyendo JSON desde S3: {str(e)}")
+        logger.error(
+            "Error leyendo JSON desde S3. ErrorType=%s Detail=%s",
+            type(e).__name__,
+            redact_text(str(e)),
+        )
         return None
 
 def get_private_key():
@@ -186,7 +275,11 @@ def get_private_key():
         private_key = serialization.load_pem_private_key(private_key_pem.encode(), password=None)
         return private_key
     except (BotoCoreError, NoCredentialsError, ClientError) as e:
-        logger.error(f"Error obteniendo la clave privada: {str(e)}")
+        logger.error(
+            "Error obteniendo la clave privada. ErrorType=%s Detail=%s",
+            type(e).__name__,
+            redact_text(str(e)),
+        )
         return None
 
 def unpad(s):
@@ -288,16 +381,17 @@ def update_workstation(workstation, workstation_id, url, headers):
         return {"statusCode": 500, "body": f"Error al enviar datos a API: {str(e)}"}
 
 def lambda_handler(event, context):
-    logger.info("Inicio de ejecución de Lambda")
+    correlation_id = getattr(context, "aws_request_id", "n/a")
+    logger.info("Inicio de ejecución de Lambda. CorrelationId=%s", correlation_id)
     url = "https://soporte.stillion.tech/api/v3/workstations"
     api_key = get_api_key()
     if not api_key:
-        logger.error("No se pudo obtener la API Key.")
+        logger.error("No se pudo obtener la API key. CorrelationId=%s", correlation_id)
         return {"statusCode": 500, "body": "Error obteniendo la API Key"}
 
     client_id = event.get("clientID")
     if not client_id:
-        logger.warning("clientID no proporcionado en el evento.")
+        logger.warning("clientID no proporcionado en el evento. CorrelationId=%s", correlation_id)
         return {"statusCode": 400, "body": "clientID no proporcionado"}
     
     headers = {"authtoken": api_key, "Content-Type": "application/x-www-form-urlencoded"}
@@ -321,10 +415,20 @@ def lambda_handler(event, context):
         
         # Reemplazar 'defaultstring' en todo el JSON por 'DEFAULTSTRING-<name_value>'
         decrypted_event = replace_defaultstring_with_name(decrypted_event, name_value)
- 
-        logger.info("Payload desencriptado correctamente.")
+        asset_reference = build_asset_reference(name_value, workstation.get("org_serial_number"))
+        logger.info(
+            "Payload desencriptado correctamente. CorrelationId=%s CryptoVersion=%s AssetRef=%s",
+            correlation_id,
+            encrypted_payload.get("crypto_version") or "legacy",
+            asset_reference,
+        )
     except Exception as e:
-        logger.error(f"Error en desencriptación: {str(e)}")
+        logger.error(
+            "Error en desencriptación. ErrorType=%s Detail=%s CorrelationId=%s",
+            type(e).__name__,
+            redact_text(str(e)),
+            correlation_id,
+        )
         return {"statusCode": 400, "body": f"Error en desencriptación: {str(e)}"}
     
     workstation = decrypted_event.get("workstation", {})
@@ -336,21 +440,31 @@ def lambda_handler(event, context):
     hostname = workstation.get("name")
     
     if not serial_number:
-        logger.warning("SerialNumber no proporcionado en el payload.")
+        logger.warning("SerialNumber no proporcionado en el payload. CorrelationId=%s", correlation_id)
         return {"statusCode": 400, "body": "SerialNumber no proporcionado"}
     
     try:
         client_id = int(client_id)
     except ValueError:
-        logger.warning(f"clientID inválido: {client_id}")
+        logger.warning(
+            "clientID inválido. CorrelationId=%s ClientIdDetail=%s",
+            correlation_id,
+            describe_text(client_id),
+        )
         return {"statusCode": 400, "body": f"client_id inválido: {client_id}"}
     
 
     account_obj = {"id": client_id}
     workstation_id = get_workstation_id(serial_number)
+    asset_reference = build_asset_reference(hostname, serial_number)
     
     if workstation_id:
-        logger.info(f"Actualizando workstation {workstation_id}")
+        logger.info(
+            "Actualizando workstation. WorkstationId=%s CorrelationId=%s AssetRef=%s",
+            workstation_id,
+            correlation_id,
+            asset_reference,
+        )
         update_data = {"workstation": workstation }
         try:
             r = requests.put(
@@ -361,13 +475,25 @@ def lambda_handler(event, context):
             )
             if r.status_code in [200, 201]:
                 logger.info(
-                    f"Operation: Update Workstation {hostname} | Correcto"
+                    "Operation=UpdateWorkstation StatusCode=%s CorrelationId=%s AssetRef=%s",
+                    r.status_code,
+                    correlation_id,
+                    asset_reference,
                 )
             else:
                 logger.error(
-                    f"Operation: Update Workstation {hostname} | statusCode: {r.status_code}, URL: {url}/{workstation_id}, Data: {json.dumps(update_data)}, Body: {r.text}"
+                    "Operation=UpdateWorkstation StatusCode=%s Response=%s CorrelationId=%s AssetRef=%s",
+                    r.status_code,
+                    describe_text(r.text),
+                    correlation_id,
+                    asset_reference,
                 )
-                report_failure_request(r.text, hostname=hostname, serial_number=serial_number, workstation=decrypted_event
+                report_failure_request(
+                    r.text,
+                    hostname=hostname,
+                    serial_number=serial_number,
+                    workstation=decrypted_event,
+                    correlation_id=correlation_id,
                 )
             return {
                 "operation": "Update Workstation",
@@ -377,8 +503,20 @@ def lambda_handler(event, context):
                 "Data": json.dumps(update_data)
             }
         except requests.exceptions.RequestException as e:
-            logger.error(f"Error al actualizar Workstation {hostname}: {e}")
-            report_failure_request(str(e), hostname=hostname, serial_number=serial_number, workstation=decrypted_event)
+            logger.error(
+                "Error al actualizar workstation. ErrorType=%s Detail=%s CorrelationId=%s AssetRef=%s",
+                type(e).__name__,
+                redact_text(str(e)),
+                correlation_id,
+                asset_reference,
+            )
+            report_failure_request(
+                str(e),
+                hostname=hostname,
+                serial_number=serial_number,
+                workstation=decrypted_event,
+                correlation_id=correlation_id,
+            )
             return {"statusCode": 500, "body": f"Error al enviar datos a API: {str(e)}"}
 
     else:
@@ -424,13 +562,23 @@ def lambda_handler(event, context):
             )
             
             if r.status_code in [200, 201]:
-                logger.info(f"Workstation {hostname} creada: {r.status_code}")
+                logger.info(
+                    "Operation=CreateWorkstation StatusCode=%s CorrelationId=%s AssetRef=%s",
+                    r.status_code,
+                    correlation_id,
+                    asset_reference,
+                )
 
                 workstation_id = get_workstation_id(serial_number)
 
                 if workstation_id:   
                     
-                    logger.info(f"Workstation creada con ID: {workstation_id}")
+                    logger.info(
+                        "Workstation creada y localizada. WorkstationId=%s CorrelationId=%s AssetRef=%s",
+                        workstation_id,
+                        correlation_id,
+                        asset_reference,
+                    )
                     update_data = {"workstation": workstation }
                     try:
                         r = requests.put(
@@ -439,7 +587,12 @@ def lambda_handler(event, context):
                             data={"input_data": json.dumps(update_data)},
                             timeout=5
                         )
-                        logger.info("Actualización post-creación exitosa.")
+                        logger.info(
+                            "Actualización post-creación exitosa. StatusCode=%s CorrelationId=%s AssetRef=%s",
+                            r.status_code,
+                            correlation_id,
+                            asset_reference,
+                        )
                         return {
                             "operation": "Update Workstation",
                             "statusCode": r.status_code,
@@ -448,16 +601,36 @@ def lambda_handler(event, context):
                             "Data": json.dumps(update_data)
                         }
                     except requests.exceptions.RequestException as e:
-                        logger.error(f"Error al actualizar tras crear: {e}")
+                        logger.error(
+                            "Error al actualizar tras crear. ErrorType=%s Detail=%s CorrelationId=%s AssetRef=%s",
+                            type(e).__name__,
+                            redact_text(str(e)),
+                            correlation_id,
+                            asset_reference,
+                        )
                         return {"statusCode": 500, "body": f"Error al enviar datos a API: {str(e)}"}
 
                 else:
-                    logger.error("Error al obtener ID luego de creación.")
+                    logger.error(
+                        "Error al obtener ID luego de creación. CorrelationId=%s AssetRef=%s",
+                        correlation_id,
+                        asset_reference,
+                    )
             else:
                 logger.error(
-                    f"Error al crear workstation {hostname}: {r.status_code}, {r.text}"
+                    "Operation=CreateWorkstation StatusCode=%s Response=%s CorrelationId=%s AssetRef=%s",
+                    r.status_code,
+                    describe_text(r.text),
+                    correlation_id,
+                    asset_reference,
                 )
-                report_failure_request(r.text, hostname=hostname, serial_number=serial_number, workstation=decrypted_event)
+                report_failure_request(
+                    r.text,
+                    hostname=hostname,
+                    serial_number=serial_number,
+                    workstation=decrypted_event,
+                    correlation_id=correlation_id,
+                )
 
             return {
                 "operation": "Create Workstation",
@@ -466,6 +639,18 @@ def lambda_handler(event, context):
                 "json_sent": new_pc_data
             }
         except requests.exceptions.RequestException as e:
-            logger.error(f"Error al crear workstation: {e}")
-            report_failure_request(str(e), hostname=hostname, serial_number=serial_number, workstation=decrypted_event)
+            logger.error(
+                "Error al crear workstation. ErrorType=%s Detail=%s CorrelationId=%s AssetRef=%s",
+                type(e).__name__,
+                redact_text(str(e)),
+                correlation_id,
+                asset_reference,
+            )
+            report_failure_request(
+                str(e),
+                hostname=hostname,
+                serial_number=serial_number,
+                workstation=decrypted_event,
+                correlation_id=correlation_id,
+            )
             return {"statusCode": 500, "body": f"Error al enviar datos a API: {str(e)}"}

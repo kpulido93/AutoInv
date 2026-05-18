@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using System.Linq;
 
 using AutoInventario.Helpers;
 
@@ -48,18 +49,35 @@ namespace AutoInventario.Services
                 HttpResponseMessage response = await client.PostAsync(webhookUrl, content);
 
                 string responseText = await response.Content.ReadAsStringAsync();
-                Console.WriteLine($"Respuesta del servidor: {response.StatusCode} - {responseText}");
+                string correlationId = TryGetCorrelationId(response);
+                Console.WriteLine(
+                    $"Respuesta del servidor: {response.StatusCode} (correlation_id={correlationId}, body_length={responseText.Length})");
 
                 if (response.IsSuccessStatusCode)
                 {
-                    Console.WriteLine("Datos enviados correctamente al webhook.");
+                    Console.WriteLine($"Datos enviados correctamente al webhook. CorrelationId={correlationId}");
                 }
                 else
                 {
-                    Console.WriteLine($"Error al enviar los datos: {response.StatusCode} - {responseText}");
+                    Console.WriteLine(
+                        $"Error al enviar los datos al webhook. StatusCode={response.StatusCode}, correlation_id={correlationId}, body_length={responseText.Length}");
                 }
             }
 
+        }
+
+        private static string TryGetCorrelationId(HttpResponseMessage response)
+        {
+            if (response.Headers.TryGetValues("X-Correlation-ID", out var values))
+            {
+                var correlationId = values.FirstOrDefault();
+                if (!string.IsNullOrWhiteSpace(correlationId))
+                {
+                    return correlationId;
+                }
+            }
+
+            return "n/a";
         }
     }
 }
