@@ -79,7 +79,11 @@ namespace Webhook
                 }, "InventoryProcessing:AwsLambda:FunctionName is required when InventoryProcessing:Mode is AwsLambda.")
                 .ValidateOnStart();
             services.AddOptions<AwsOptions>()
-                .Bind(_configuration.GetSection(AwsOptions.SectionName));
+                .Bind(_configuration.GetSection(AwsOptions.SectionName))
+                .Validate(
+                    _ => !HasForbiddenAwsCredentialConfiguration(_configuration.GetSection(AwsOptions.SectionName)),
+                    "Do not configure AWS credentials under InventoryProcessing:AwsLambda. Use IAM Role, AWS SDK profiles, or the default credential chain.")
+                .ValidateOnStart();
             services.Configure<ManageEngineOptions>(
                 _configuration.GetSection(ManageEngineOptions.SectionName));
             services.Configure<LicenseOptions>(
@@ -191,6 +195,23 @@ namespace Webhook
                 "mrbyte",
                 "Webhook",
                 "private.key");
+        }
+
+        private static bool HasForbiddenAwsCredentialConfiguration(IConfigurationSection awsSection)
+        {
+            foreach (var child in awsSection.GetChildren())
+            {
+                foreach (var forbiddenKey in AwsOptions.ForbiddenCredentialKeys)
+                {
+                    if (string.Equals(child.Key, forbiddenKey, StringComparison.OrdinalIgnoreCase) &&
+                        !string.IsNullOrWhiteSpace(child.Value))
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
         }
     }
 }

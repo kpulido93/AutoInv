@@ -68,6 +68,12 @@ Compatibilidad legada mantenida:
 - `AUTOINVENTARIO_LAMBDA_NAME` sigue poblando `InventoryProcessing:AwsLambda:FunctionName`.
 - `AWS_REGION` y `AWS_DEFAULT_REGION` siguen poblando `InventoryProcessing:AwsLambda:Region`.
 
+Regla de credenciales AWS:
+
+- `InventoryProcessing:AwsLambda` solo admite `FunctionName` y `Region`; no se aceptan `AccessKeyId`, `SecretAccessKey` ni `SessionToken` en `appsettings` o configuracion inline.
+- En AWS, desplegar con IAM Role, instance profile o task role para que el SDK resuelva credenciales sin secretos en el Webhook.
+- Fuera de AWS, usar `AWS_PROFILE` u otro mecanismo estandar soportado por la default credential chain del AWS SDK en el host, nunca credenciales embebidas en JSON o codigo.
+
 Validacion en arranque:
 
 - El servicio falla temprano si faltan `AutoInventario:ApiKey`, `ConnectionStrings:Postgres` o una ruta valida de `Security:PrivateKeyPath`.

@@ -14,6 +14,8 @@ Nunca versionar:
 
 Todo secreto que haya sido versionado, compartido o almacenado fuera de un store seguro debe tratarse como comprometido y rotarse.
 
+Para el Webhook en modo `AwsLambda`, no agregar `AccessKeyId`, `SecretAccessKey` ni `SessionToken` en `appsettings` o configuracion inline. El cliente AWS debe autenticarse por IAM Role, perfil del SDK o default credential chain del host.
+
 ## Almacenamiento permitido
 
 - AWS Secrets Manager para secretos usados por Lambda o integraciones AWS.
