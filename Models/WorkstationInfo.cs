@@ -27,6 +27,14 @@ namespace AutoInventario.Models
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public string? manufacturer { get; set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public string? os_family { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public string? os_caption { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public string? os_version { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public string? os_build { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public bool? is_server { get; set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public ServerInventory? server_inventory { get; set; }

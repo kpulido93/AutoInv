@@ -29,6 +29,7 @@ namespace AutoInventario.Services
                 var os = searcher.Get().OfType<ManagementObject>().FirstOrDefault();
                 if (os?["ProductType"] is null)
                 {
+                    LogOperatingSystemDetectionFallback("ProductTypeUnavailable");
                     return false;
                 }
 
@@ -36,11 +37,15 @@ namespace AutoInventario.Services
             }
             catch (Exception ex) when (IsRecoverableWmiFailure(ex))
             {
+                LogOperatingSystemDetectionFallback($"ErrorType={ex.GetType().Name}");
                 return false;
             }
         }
 
         public static bool IsServerProductType(uint productType) => productType is 2 or 3;
+
+        public static string GetOperatingSystemFamily(bool isServer)
+            => isServer ? "windows_server" : "windows_workstation";
 
         public static ServerInventory? GetServerInventory(bool isServer, string? configuredServiceNames = null)
         {
@@ -212,5 +217,11 @@ namespace AutoInventario.Services
 
         private static bool IsRecoverableWmiFailure(Exception ex)
             => ex is ManagementException or UnauthorizedAccessException or COMException or InvalidOperationException;
+
+        private static void LogOperatingSystemDetectionFallback(string reason)
+        {
+            Console.WriteLine(
+                $"No se pudo determinar si el sistema operativo es Windows Server. {reason}. Se usara is_server=false.");
+        }
     }
 }

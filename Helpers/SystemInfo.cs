@@ -18,18 +18,23 @@ namespace AutoInventario.Helpers
         public static string GenerateWorkstationJson(string clientId)
         {
             var isServer = WindowsServerInventoryService.IsWindowsServer();
+            var operatingSystem = GetOperatingSystemInfo();
             var workstation = new Workstation
             {
                 name = Environment.MachineName,
                 last_logged_user = Environment.UserName,
                 org_serial_number = GetBiosSerialNumber(),
                 manufacturer = GetSystemManufacturer(),
+                os_family = WindowsServerInventoryService.GetOperatingSystemFamily(isServer),
+                os_caption = operatingSystem.os,
+                os_version = operatingSystem.version,
+                os_build = operatingSystem.build_number,
                 is_remote_control_prompt_enabled = IsRemoteControlPromptEnabled(),
                 is_server = isServer,
                 server_inventory = WindowsServerInventoryService.GetServerInventory(
                     isServer,
                     Environment.GetEnvironmentVariable("AUTOINVENTARIO_SERVER_SERVICES")),
-                operating_system = GetOperatingSystemInfo(),
+                operating_system = operatingSystem,
                 computer_system = GetComputerSystemInfo(),
                 product = new Product
                 {

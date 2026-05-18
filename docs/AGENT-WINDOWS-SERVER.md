@@ -16,7 +16,16 @@ Valores:
 - `2`: Domain Controller.
 - `3`: Windows Server.
 
-El campo existente `workstation.is_server` sigue presente. En Windows cliente se serializa como `false` y no se agrega `server_inventory`.
+El payload principal ahora incluye tambien:
+
+- `workstation.os_family`
+- `workstation.os_caption`
+- `workstation.os_version`
+- `workstation.os_build`
+- `workstation.is_server`
+
+En Windows cliente se serializa `is_server=false`, `os_family=windows_workstation` y no se agrega `server_inventory`.
+En Windows Server o Domain Controller se serializa `os_family=windows_server`.
 
 ## Campos Server
 

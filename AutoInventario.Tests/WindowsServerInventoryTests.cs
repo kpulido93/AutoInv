@@ -16,6 +16,14 @@ public class WindowsServerInventoryTests
         Assert.Equal(expected, WindowsServerInventoryService.IsServerProductType(productType));
     }
 
+    [Theory]
+    [InlineData(false, "windows_workstation")]
+    [InlineData(true, "windows_server")]
+    public void GetOperatingSystemFamily_returns_expected_values(bool isServer, string expected)
+    {
+        Assert.Equal(expected, WindowsServerInventoryService.GetOperatingSystemFamily(isServer));
+    }
+
     [Fact]
     public void GetConfiguredServiceNames_splits_and_deduplicates_values()
     {
@@ -32,6 +40,10 @@ public class WindowsServerInventoryTests
             workstation = new Workstation
             {
                 name = "SRV-APP-01",
+                os_family = "windows_server",
+                os_caption = "Microsoft Windows Server 2022 Standard",
+                os_version = "10.0.20348",
+                os_build = "20348",
                 is_server = true,
                 operating_system = new OperatingSystemInfo
                 {
@@ -70,10 +82,42 @@ public class WindowsServerInventoryTests
         var workstation = root["workstation"]!;
 
         Assert.True(workstation.Value<bool>("is_server"));
+        Assert.Equal("windows_server", workstation.Value<string>("os_family"));
+        Assert.Equal("Microsoft Windows Server 2022 Standard", workstation.Value<string>("os_caption"));
+        Assert.Equal("10.0.20348", workstation.Value<string>("os_version"));
+        Assert.Equal("20348", workstation.Value<string>("os_build"));
         Assert.Equal("Microsoft Windows Server 2022 Standard", workstation["operating_system"]!.Value<string>("os"));
         Assert.Equal("20348", workstation["server_inventory"]!.Value<string>("os_build"));
         Assert.Equal("corp.example", workstation["server_inventory"]!.Value<string>("domain"));
         Assert.Equal("W3SVC", workstation["server_inventory"]!["tracked_services"]![0]!.Value<string>("name"));
+    }
+
+    [Fact]
+    public void Workstation_serialization_marks_workstation_operating_systems_as_non_server()
+    {
+        var payload = new WorkstationInfo
+        {
+            workstation = new Workstation
+            {
+                name = "PC-001",
+                os_family = "windows_workstation",
+                os_caption = "Microsoft Windows 11 Pro",
+                os_version = "10.0.22631",
+                os_build = "22631",
+                is_server = false
+            }
+        };
+
+        var json = JsonConvert.SerializeObject(payload);
+        var root = JObject.Parse(json);
+        var workstation = root["workstation"]!;
+
+        Assert.False(workstation.Value<bool>("is_server"));
+        Assert.Equal("windows_workstation", workstation.Value<string>("os_family"));
+        Assert.Equal("Microsoft Windows 11 Pro", workstation.Value<string>("os_caption"));
+        Assert.Equal("10.0.22631", workstation.Value<string>("os_version"));
+        Assert.Equal("22631", workstation.Value<string>("os_build"));
+        Assert.Null(workstation["server_inventory"]);
     }
 
     [Fact]
