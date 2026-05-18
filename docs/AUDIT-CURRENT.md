@@ -62,7 +62,7 @@ Observacion adicional:
 
 | Comando | Resultado | Error clave si falla | Impacto | Siguiente accion recomendada |
 | --- | --- | --- | --- | --- |
-| `dotnet list AutoInventario.csproj package --vulnerable --include-transitive` | Correcto, exit code `0`, con vulnerabilidad reportada. | `Microsoft.Extensions.Caching.Memory 8.0.0`, gravedad `High`, `GHSA-qj66-m88j-hmgj`. | Alto. El agente arrastra una dependencia transitive vulnerable. | Actualizar la cadena de dependencias y repetir el scan. |
+| `dotnet list AutoInventario.csproj package --vulnerable --include-transitive` | Correcto, exit code `0`. | No se reportaron paquetes vulnerables. | Bajo. El agente no presenta advisories NuGet activos en este check. | Mantener el scan en CI y revisar cambios de paquetes antes de subir de major. |
 | `dotnet list Webhook/Webhook-Inventario.csproj package --vulnerable --include-transitive` | Correcto, exit code `0`. | No se reportaron paquetes vulnerables. | Bajo. El webhook no presenta advisories NuGet activos en este check. | Mantener el scan en CI. |
 
 ## Seguridad
@@ -70,14 +70,14 @@ Observacion adicional:
 | Comando o inspeccion | Resultado | Error clave si falla | Impacto | Siguiente accion recomendada |
 | --- | --- | --- | --- | --- |
 | `powershell -ExecutionPolicy Bypass -File scripts/ci/Invoke-SecretScan.ps1 -Root .` | Correcto, exit code `0`. | No aplica. | Bajo. No se confirmaron secretos reales en archivos trackeados con el escaneo alineado a CI. | Mantener `gitleaks` o el fallback actual como gate obligatorio. |
-| Revision estatica focalizada de webhook, Lambda y pipeline | Hallazgos reales documentados en `docs/SECURITY-FINDINGS.md`. | No aplica. | Variable segun hallazgo. | Priorizar dependencia NuGet vulnerable, manejo de datos desencriptados en Lambda y hardening de configuracion del webhook. |
+| Revision estatica focalizada de webhook, Lambda y pipeline | Hallazgos reales documentados en `docs/SECURITY-FINDINGS.md`. | No aplica. | Variable segun hallazgo. | Priorizar manejo de datos desencriptados en Lambda, hardening de configuracion del webhook y el umbral NuGet del pipeline. |
 
 ## Pipeline
 
 | Archivo o gate | Estado observado | Impacto | Siguiente accion recomendada |
 | --- | --- | --- | --- |
 | `azure-pipelines.yml` | `ProductGates` ejecuta secret scan, NuGet scan, build/test .NET, `py_compile` y `terraform fmt -check`. | Bueno para reproducibilidad del producto. | Mantener scripts de `scripts/ci/` como fuente de verdad del pipeline. |
-| `azure-pipelines.yml` | `NuGetVulnerabilityThreshold` esta en `Critical`. | Medio. El advisory `High` actual del agente no bloquearia CI. | Bajar el umbral a `High` o justificar una excepcion temporal documentada. |
+| `azure-pipelines.yml` | `NuGetVulnerabilityThreshold` esta en `Critical`. | Medio. Un advisory `High` futuro no bloquearia CI automaticamente. | Bajar el umbral a `High` o justificar una excepcion temporal documentada. |
 | `.azure-pipelines/pipeline.yml` | El pipeline Terraform si hace `init -backend=false` antes de `validate`. | Bueno para validar providers en CI. | Contrastar su resultado con el fallo local de DNS si aparecen errores similares en Azure. |
 
 ## Reproduccion local
@@ -108,4 +108,4 @@ Los scripts continuan aunque un comando falle, devuelven exit code distinto de c
 
 - El codigo productivo compila y las pruebas del agente y del webhook pasan en local.
 - El unico bloqueo tecnico reproducible del flujo base es Terraform desde este host por bootstrap/red hacia `registry.terraform.io`.
-- La deuda de seguridad mas clara hoy es una dependencia NuGet `High` en el agente y varias oportunidades de hardening operativas documentadas en `docs/SECURITY-FINDINGS.md`.
+- La deuda de seguridad mas clara hoy esta en el manejo de datos desencriptados en Lambda, el hardening de configuracion del webhook y el umbral NuGet del pipeline.
