@@ -9,6 +9,7 @@
     <ApplicationIcon>Resources\logo.ico</ApplicationIcon>
   </PropertyGroup>
 
+  <!-- The canonical Windows agent project lives at the repository root. -->
   <ItemGroup>
     <Compile Remove="AutoInventario.Updater\**;AutoInventario.Tests\**;Webhook.Tests\**;Webhook\**;Lambda-Inventario\**;Infraestructura-Terraform\**;docs\**;scripts\**" />
     <EmbeddedResource Remove="AutoInventario.Updater\**;AutoInventario.Tests\**;Webhook.Tests\**;Webhook\**;Lambda-Inventario\**;Infraestructura-Terraform\**;docs\**;scripts\**" />

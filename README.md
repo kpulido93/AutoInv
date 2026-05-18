@@ -6,7 +6,7 @@ AutoInventario es una suite para recopilar inventario de equipos Windows, cifrar
 
 La estructura canonica del agente es la raiz del repositorio. `AutoInventario.csproj`, `Program.cs`, `Helpers/`, `Models/`, `Services/` y `Resources/` pertenecen al agente Windows.
 
-La solucion, los tests y el pipeline principal apuntan al proyecto raiz `AutoInventario.csproj`.
+La solucion, los tests y el pipeline principal apuntan solo al proyecto raiz `AutoInventario.csproj`. La ruta historica `Autoinventario/AutoInventario.csproj` ya no forma parte de la estructura canonica del agente y no debe reintroducirse.
 
 Resumen de validaciones principales:
 

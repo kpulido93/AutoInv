@@ -9,7 +9,7 @@ git status --short --branch
 git diff --name-status
 ```
 
-La estructura canonica del agente es la raiz del repositorio. No usar rutas antiguas bajo `Autoinventario/`; la solucion, los tests y el pipeline deben apuntar a `AutoInventario.csproj`.
+La estructura canonica del agente es la raiz del repositorio. No usar rutas antiguas bajo `Autoinventario/`; la solucion, los tests y el pipeline deben apuntar solo a `AutoInventario.csproj`.
 
 ## Build local
 
