@@ -1,7 +1,8 @@
 using Microsoft.AspNetCore.Http;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 
+using Webhook.Options;
 using Webhook.Services;
 
 namespace Webhook.Tests;
@@ -79,13 +80,11 @@ public class ApiKeyMiddlewareTests
 
     private static ApiKeyMiddleware CreateMiddleware(RequestDelegate next)
     {
-        var config = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["AutoInventario:ApiKey"] = "expected-key"
-            })
-            .Build();
+        var options = Microsoft.Extensions.Options.Options.Create(new AutoInventarioOptions
+        {
+            ApiKey = "expected-key"
+        });
 
-        return new ApiKeyMiddleware(next, config, NullLogger<ApiKeyMiddleware>.Instance);
+        return new ApiKeyMiddleware(next, options, NullLogger<ApiKeyMiddleware>.Instance);
     }
 }

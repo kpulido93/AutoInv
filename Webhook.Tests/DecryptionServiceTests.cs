@@ -1,8 +1,9 @@
 using System.Security.Cryptography;
 using System.Text;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using Models;
+using Webhook.Options;
 using Webhook.Services;
 
 namespace Webhook.Tests;
@@ -91,14 +92,12 @@ public class DecryptionServiceTests
 
     private static DecryptionService CreateService(string privateKeyPath)
     {
-        var configuration = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["Security:PrivateKeyPath"] = privateKeyPath
-            })
-            .Build();
+        var options = Microsoft.Extensions.Options.Options.Create(new SecurityOptions
+        {
+            PrivateKeyPath = privateKeyPath
+        });
 
-        return new DecryptionService(configuration, NullLogger<DecryptionService>.Instance);
+        return new DecryptionService(options, NullLogger<DecryptionService>.Instance);
     }
 
     private static WebhookEvent CreateAuthenticatedPayload(RSA rsa, string clientId, string plaintext)

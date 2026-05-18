@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 
 using Amazon;
 using Amazon.Lambda;
@@ -34,8 +35,51 @@ namespace Webhook
             services.AddHealthChecks();
             services.AddMemoryCache();
             services.AddSingleton<EventStore>();
-            services.Configure<InventoryProcessingOptions>(
-                _configuration.GetSection(InventoryProcessingOptions.SectionName));
+            services.AddOptions<AutoInventarioOptions>()
+                .Bind(_configuration.GetSection(AutoInventarioOptions.SectionName))
+                .Validate(options => !string.IsNullOrWhiteSpace(options.ApiKey),
+                    $"{AutoInventarioOptions.SectionName}:ApiKey is required.")
+                .ValidateOnStart();
+            services.AddOptions<ConnectionStringsOptions>()
+                .Bind(_configuration.GetSection(ConnectionStringsOptions.SectionName))
+                .Validate(options => !string.IsNullOrWhiteSpace(options.Postgres),
+                    $"{ConnectionStringsOptions.SectionName}:Postgres is required.")
+                .ValidateOnStart();
+            services.AddOptions<SecurityOptions>()
+                .Bind(_configuration.GetSection(SecurityOptions.SectionName))
+                .Validate(options => !string.IsNullOrWhiteSpace(options.PrivateKeyPath),
+                    $"{SecurityOptions.SectionName}:PrivateKeyPath is required.")
+                .Validate(options => File.Exists(options.PrivateKeyPath),
+                    "Configured private key file was not found.")
+                .ValidateOnStart();
+            services.PostConfigure<SecurityOptions>(options =>
+            {
+                if (string.IsNullOrWhiteSpace(options.PrivateKeyPath))
+                {
+                    options.PrivateKeyPath = GetDefaultPrivateKeyPath();
+                }
+            });
+            services.AddOptions<InventoryProcessingOptions>()
+                .Bind(_configuration.GetSection(InventoryProcessingOptions.SectionName))
+                .Validate(options =>
+                {
+                    var mode = options.Mode?.Trim();
+                    return string.IsNullOrWhiteSpace(mode) ||
+                           string.Equals(mode, InventoryProcessingModes.Local, StringComparison.OrdinalIgnoreCase) ||
+                           string.Equals(mode, InventoryProcessingModes.AwsLambda, StringComparison.OrdinalIgnoreCase);
+                }, "InventoryProcessing:Mode must be Local or AwsLambda.")
+                .Validate(options =>
+                {
+                    if (!string.Equals(options.Mode, InventoryProcessingModes.AwsLambda, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return true;
+                    }
+
+                    return !string.IsNullOrWhiteSpace(options.AwsLambda.FunctionName);
+                }, "InventoryProcessing:AwsLambda:FunctionName is required when InventoryProcessing:Mode is AwsLambda.")
+                .ValidateOnStart();
+            services.AddOptions<AwsOptions>()
+                .Bind(_configuration.GetSection(AwsOptions.SectionName));
             services.Configure<ManageEngineOptions>(
                 _configuration.GetSection(ManageEngineOptions.SectionName));
             services.Configure<LicenseOptions>(
@@ -125,18 +169,8 @@ namespace Webhook
 
         private static IAmazonLambda CreateLambdaClient(IServiceProvider serviceProvider)
         {
-            var options = serviceProvider.GetRequiredService<IOptions<InventoryProcessingOptions>>().Value;
-            var regionName = options.AwsLambda.Region;
-
-            if (string.IsNullOrWhiteSpace(regionName))
-            {
-                regionName = Environment.GetEnvironmentVariable("AWS_REGION");
-            }
-
-            if (string.IsNullOrWhiteSpace(regionName))
-            {
-                regionName = Environment.GetEnvironmentVariable("AWS_DEFAULT_REGION");
-            }
+            var options = serviceProvider.GetRequiredService<IOptions<AwsOptions>>().Value;
+            var regionName = options.Region;
 
             if (string.IsNullOrWhiteSpace(regionName))
             {
@@ -147,6 +181,15 @@ namespace Webhook
             {
                 RegionEndpoint = RegionEndpoint.GetBySystemName(regionName)
             });
+        }
+
+        private static string GetDefaultPrivateKeyPath()
+        {
+            return Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+                "mrbyte",
+                "Webhook",
+                "private.key");
         }
     }
 }

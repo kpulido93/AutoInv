@@ -13,12 +13,12 @@ namespace Webhook.Services;
 public sealed class AwsLambdaInventoryProcessor : IInventoryProcessor, IDisposable
 {
     private readonly Lazy<IAmazonLambda> _lambdaClient;
-    private readonly IOptions<InventoryProcessingOptions> _options;
+    private readonly IOptions<AwsOptions> _options;
     private readonly ILogger<AwsLambdaInventoryProcessor> _logger;
 
     public AwsLambdaInventoryProcessor(
         Lazy<IAmazonLambda> lambdaClient,
-        IOptions<InventoryProcessingOptions> options,
+        IOptions<AwsOptions> options,
         ILogger<AwsLambdaInventoryProcessor> logger)
     {
         _lambdaClient = lambdaClient;
@@ -80,11 +80,7 @@ public sealed class AwsLambdaInventoryProcessor : IInventoryProcessor, IDisposab
 
     private string ResolveFunctionName()
     {
-        var functionName = _options.Value.AwsLambda.FunctionName;
-        if (string.IsNullOrWhiteSpace(functionName))
-        {
-            functionName = System.Environment.GetEnvironmentVariable("AUTOINVENTARIO_LAMBDA_NAME");
-        }
+        var functionName = _options.Value.FunctionName;
 
         if (string.IsNullOrWhiteSpace(functionName))
         {

@@ -6,9 +6,11 @@ using System.Text;
 using System.Threading.Tasks;
 
 using Microsoft.AspNetCore.Http;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Primitives;
+
+using Webhook.Options;
 
 namespace Webhook.Services
 {
@@ -29,13 +31,16 @@ namespace Webhook.Services
         public const string CorrelationIdHeaderName = "X-Correlation-ID";
 
         private readonly RequestDelegate _next;
-        private readonly IConfiguration _config;
+        private readonly IOptions<AutoInventarioOptions> _options;
         private readonly ILogger<ApiKeyMiddleware> _logger;
 
-        public ApiKeyMiddleware(RequestDelegate next, IConfiguration config, ILogger<ApiKeyMiddleware> logger)
+        public ApiKeyMiddleware(
+            RequestDelegate next,
+            IOptions<AutoInventarioOptions> options,
+            ILogger<ApiKeyMiddleware> logger)
         {
             _next = next;
-            _config = config;
+            _options = options;
             _logger = logger;
         }
 
@@ -63,7 +68,7 @@ namespace Webhook.Services
                 return;
             }
 
-            var expected = _config["AutoInventario:ApiKey"];
+            var expected = _options.Value.ApiKey;
             if (string.IsNullOrWhiteSpace(expected))
             {
                 context.Response.StatusCode = StatusCodes.Status500InternalServerError;

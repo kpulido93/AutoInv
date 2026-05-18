@@ -15,7 +15,7 @@ El proyecto compila en `net8.0`. Mantener dependencias actualizadas y validar vu
 
 - El proyecto canonico del servicio es `Webhook/Webhook-Inventario.csproj` y apunta a `net8.0`.
 - `Program.cs` mantiene el patron `Startup` sobre ASP.NET Core 8 para conservar endpoints, middleware y configuracion sin cambiar contratos.
-- La configuracion sigue resolviendose desde `appsettings*.json` y variables de entorno; no se introdujeron credenciales embebidas para la migracion.
+- La configuracion sensible se centraliza con Options Pattern; `Program.cs` concentra los overrides de variables de entorno legadas y `Startup` valida la configuracion critica al iniciar.
 - `Dockerfile` usa `mcr.microsoft.com/dotnet/sdk:8.0` y `mcr.microsoft.com/dotnet/aspnet:8.0`, alineado con el runtime soportado.
 
 ## Configuracion
@@ -26,6 +26,7 @@ Claves esperadas:
 | --- | --- |
 | `ConnectionStrings:Postgres` | Conexion de lectura para listar clientes. |
 | `AutoInventario:ApiKey` | Valor esperado por `X-AutoInventario-Key` en rutas protegidas. |
+| `AutoInventario:VerifyToken` | Token esperado por `GET /webhooks` para la verificacion inicial del proveedor. |
 | `Security:PrivateKeyPath` | Ruta de clave privada local para descifrado. |
 | `WEBHOOK_PRIVATE_KEY_PATH` | Override por variable de entorno. |
 | `InventoryProcessing:Mode` | `Local` para aceptar y almacenar localmente; `AwsLambda` para invocar Lambda. |
@@ -43,6 +44,35 @@ Claves esperadas:
 | `AUTOINVENTARIO_LAMBDA_NAME` | Fallback temporal para clientes/despliegues antiguos que aun no usan `InventoryProcessing:AwsLambda:FunctionName`. |
 
 No guardar valores reales en `appsettings.json`.
+
+Opciones tipadas actuales:
+
+- `AutoInventarioOptions`: API key y verify token.
+- `SecurityOptions`: ruta efectiva de la clave privada.
+- `ConnectionStringsOptions`: cadena `Postgres`.
+- `InventoryProcessingOptions` y `AwsOptions`: modo de procesamiento, Lambda name y region.
+
+Variables de entorno recomendadas:
+
+- `ConnectionStrings__Postgres`
+- `AutoInventario__ApiKey`
+- `AutoInventario__VerifyToken`
+- `Security__PrivateKeyPath`
+- `InventoryProcessing__Mode`
+- `InventoryProcessing__AwsLambda__FunctionName`
+- `InventoryProcessing__AwsLambda__Region`
+
+Compatibilidad legada mantenida:
+
+- `WEBHOOK_PRIVATE_KEY_PATH` sigue sobreescribiendo `Security:PrivateKeyPath`.
+- `AUTOINVENTARIO_LAMBDA_NAME` sigue poblando `InventoryProcessing:AwsLambda:FunctionName`.
+- `AWS_REGION` y `AWS_DEFAULT_REGION` siguen poblando `InventoryProcessing:AwsLambda:Region`.
+
+Validacion en arranque:
+
+- El servicio falla temprano si faltan `AutoInventario:ApiKey`, `ConnectionStrings:Postgres` o una ruta valida de `Security:PrivateKeyPath`.
+- Si `InventoryProcessing:Mode=AwsLambda`, tambien exige `InventoryProcessing:AwsLambda:FunctionName`.
+- Si no se configura `Security:PrivateKeyPath`, el servicio intenta `%ProgramData%\mrbyte\Webhook\private.key` antes de validar.
 
 En despliegues y desarrollo local, establecer `AutoInventario__ApiKey` mediante variable de entorno, secret store o variable secreta del pipeline.
 
