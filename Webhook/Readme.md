@@ -11,6 +11,13 @@ API ASP.NET Core que recibe inventario cifrado desde el agente AutoInventario, e
 
 El proyecto compila en `net8.0`. Mantener dependencias actualizadas y validar vulnerabilidades NuGet antes de publicar.
 
+## Compatibilidad .NET
+
+- El proyecto canonico del servicio es `Webhook/Webhook-Inventario.csproj` y apunta a `net8.0`.
+- `Program.cs` mantiene el patron `Startup` sobre ASP.NET Core 8 para conservar endpoints, middleware y configuracion sin cambiar contratos.
+- La configuracion sigue resolviendose desde `appsettings*.json` y variables de entorno; no se introdujeron credenciales embebidas para la migracion.
+- `Dockerfile` usa `mcr.microsoft.com/dotnet/sdk:8.0` y `mcr.microsoft.com/dotnet/aspnet:8.0`, alineado con el runtime soportado.
+
 ## Configuracion
 
 Claves esperadas:
@@ -116,13 +123,14 @@ Todas las respuestas incluyen `X-Correlation-ID`. Si el cliente envia ese header
 ## Build y ejecucion
 
 ```powershell
+dotnet restore Webhook\Webhook-Inventario.csproj
 dotnet build Webhook\Webhook-Inventario.csproj -c Debug
 dotnet list Webhook\Webhook-Inventario.csproj package --vulnerable --include-transitive
 dotnet test Webhook.Tests\Webhook.Tests.csproj -c Debug
 dotnet run --project Webhook\Webhook-Inventario.csproj
 ```
 
-Validacion esperada: compila sin warning `NETSDK1138` y sin vulnerabilidades NuGet reportadas por los orígenes configurados.
+Validacion esperada: `restore` y `build` finalizan correctamente en `net8.0`, sin warning `NETSDK1138`, y el scan NuGet no reporta vulnerabilidades activas en los origenes configurados.
 
 Para despliegue Docker Compose, IIS o Windows Service, ver `docs/DEPLOYMENT-ONPREM.md`.
 

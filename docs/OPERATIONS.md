@@ -16,6 +16,7 @@ La estructura canonica del agente es la raiz del repositorio. No usar rutas anti
 Comandos utiles:
 
 ```powershell
+dotnet restore Webhook\Webhook-Inventario.csproj
 dotnet build AutoInventario.sln -c Debug
 dotnet build AutoInventario.csproj -c Debug
 dotnet build AutoInventario.Updater\AutoInventario.Updater.csproj -c Debug
@@ -30,7 +31,7 @@ Estado esperado:
 - La solucion compila con `dotnet build AutoInventario.sln -c Debug`.
 - El proyecto raiz del agente compila con `dotnet build AutoInventario.csproj -c Debug`.
 - Updater compila.
-- Webhook compila en `net8.0` sin warnings.
+- Webhook compila en `net8.0` sin warnings y mantiene `Startup` para no cambiar endpoints ni middleware al migrar.
 - Tests referencian el proyecto raiz del agente.
 - Lambda pasa validacion de sintaxis.
 

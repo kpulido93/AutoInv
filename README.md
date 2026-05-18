@@ -42,7 +42,7 @@ Componentes principales:
 
 - Agente Windows: ejecutable .NET 8 que recopila datos por WMI, registro y APIs de Windows, cifra el inventario y lo envia al Webhook.
 - Updater: ejecutable .NET 8 que reemplaza el agente instalado y relanza la tarea programada.
-- Webhook: API ASP.NET Core que recibe eventos cifrados, expone clientes y manifiesto de actualizaciones.
+- Webhook: API ASP.NET Core `net8.0` que recibe eventos cifrados, expone clientes y manifiesto de actualizaciones sin cambiar contratos de endpoint en la migracion LTS.
 - Lambda: funcion Python que descifra, normaliza y crea/actualiza workstations en ManageEngine.
 - Terraform: definicion base de rol IAM, Secrets Manager y Lambda.
 - Azure Pipelines: gates de producto, escaneo de secretos, escaneo NuGet, publish, firma de ejecutables y empaquetado del sitio Webhook.
@@ -68,7 +68,7 @@ Componentes principales:
 
 - Windows para ejecutar y validar completamente el agente.
 - .NET SDK 8 para agente, updater y tests.
-- .NET SDK/runtime 8 para el Webhook.
+- .NET SDK/runtime 8 para el Webhook, usando `Webhook/Webhook-Inventario.csproj` como proyecto canonico.
 - Python 3.12 para Lambda.
 - Terraform >= 1.5 para infraestructura.
 - AWS CLI configurado para despliegues Lambda/Terraform.
