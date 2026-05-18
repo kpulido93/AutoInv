@@ -39,10 +39,16 @@ powershell -ExecutionPolicy Bypass -File scripts/audit-local.ps1
 Si `gitleaks` esta instalado:
 
 ```bash
-gitleaks detect --config .gitleaks.toml --no-git --redact
+gitleaks detect --source . --config .gitleaks.toml --no-git --redact --exit-code 1
 ```
 
-El escaneo debe reportar rutas y tipos sin imprimir valores reales.
+Si no esta instalado, usar el wrapper del repo:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/ci/Invoke-SecretScan.ps1
+```
+
+Las plantillas `.example` y la documentacion no se allowlistean por ruta completa para evitar silenciar secretos reales pegados por accidente. El escaneo debe reportar rutas y tipos sin imprimir valores reales.
 
 ## Respuesta ante exposicion
 

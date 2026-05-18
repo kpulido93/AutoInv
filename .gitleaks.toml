@@ -4,7 +4,7 @@ title = "AutoInventario gitleaks configuration"
 useDefault = true
 
 [allowlist]
-description = "Repository-owned rule/config files and explicit placeholders"
+description = "Repository-owned scan config and explicit placeholders only"
 paths = [
   '''^\.gitleaks\.toml$''',
   '''^scripts/audit-local\.(ps1|sh)$''',
@@ -14,6 +14,9 @@ regexes = [
   '''(?i)CHANGE_ME(_[A-Z0-9]+)*''',
   '''(?i)set-with-secret-variable''',
   '''(?i)set-via-(environment|user-secrets|secret-manager)''',
+  '''(?i)local-only''',
+  '''(?i)REMOVED_SECRET''',
+  '''(?i)REMOVED_PRIVATE_KEY''',
   '''builder\.AppendLine\("-----BEGIN PRIVATE KEY-----"\)''',
   '''builder\.AppendLine\("-----END PRIVATE KEY-----"\)''',
 ]
@@ -29,6 +32,13 @@ id = "autoinventario-aws-access-key"
 description = "AWS access key IDs must not be committed"
 regex = '''\b(AKIA|ASIA)[0-9A-Z]{16}\b'''
 tags = ["aws", "key"]
+
+[[rules]]
+id = "autoinventario-aws-secret-access-key"
+description = "AWS secret access keys must not be committed"
+regex = '''(?i)(aws_secret_access_key)\s*[:=]\s*["']?([A-Za-z0-9/+=]{40})'''
+secretGroup = 2
+tags = ["aws", "secret"]
 
 [[rules]]
 id = "autoinventario-manageengine-token"
@@ -51,3 +61,11 @@ description = "Connection strings with passwords must not be committed"
 regex = '''(?i)(Host|Server|Data Source)=.+;(Password|Pwd)=([^;}\r\n]{8,})'''
 secretGroup = 3
 tags = ["database", "connection-string"]
+
+[[rules]]
+id = "autoinventario-suspicious-base64-key-blob"
+description = "Suspicious base64-encoded private key or PKCS#12 blobs must not be committed"
+regex = '''(?i)(private[_-]?key|pem|pfx|pkcs12|p12)\s*[:=]\s*["']?([A-Za-z0-9+/=]{128,})'''
+secretGroup = 2
+entropy = 4.0
+tags = ["base64", "certificate", "private-key"]
