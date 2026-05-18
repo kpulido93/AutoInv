@@ -21,9 +21,8 @@ sequenceDiagram
     Agent->>Webhook: POST /webhooks
     Webhook->>Webhook: Valida formato y descifra si tiene clave privada local
     alt InventoryProcessing:Mode=Local
-        Webhook->>Worker: Normaliza workstation y valida clientID/serial
-        Worker->>Secrets: Lee token ManageEngine por ISecretProvider
-        Worker->>ME: Envia workstation por IAssetConnector
+        Webhook->>Worker: Acepta payload y responde en modo stub
+        Worker-->>Webhook: Confirmacion local sin sincronizacion externa
     else InventoryProcessing:Mode=AwsLambda
         Webhook->>Lambda: Invoke Lambda con payload cifrado
         Lambda->>Secrets: Lee secretos externos
@@ -81,17 +80,16 @@ Responsabilidades:
 - Exponer `GET /updates/latest.json` y binarios bajo `wwwroot/updates`.
 - Aplicar cabeceras de seguridad.
 - Procesar inventario con `IInventoryProcessor`.
-- Ejecutar worker local con `IInventoryNormalizer`, `IAssetConnector` e `ISecretProvider`.
+- Ejecutar un stub local inicial sin dependencias AWS.
 - Invocar Lambda con el evento cifrado solo cuando `InventoryProcessing:Mode=AwsLambda`.
 - Validar licencias offline con `ILicenseValidator` para ediciones comerciales.
 - Mantener un store en memoria para ultimos eventos.
 
 Modo local:
 
-- `InventoryNormalizationService` replica las reglas minimas de la Lambda para limpiar nulos, puertos invalidos, discos y placeholders de BIOS/OEM.
-- `ManageEngineConnector` envia el payload normalizado al endpoint configurado de workstations.
-- `ConfigurationSecretProvider` obtiene el token desde `Secrets:<nombre>` o desde una variable de entorno con el nombre configurado.
-- Las interfaces permiten agregar otros conectores sin depender de AWS.
+- `LocalInventoryProcessor` acepta el payload ya descifrado y devuelve una respuesta explicita de stub.
+- No sincroniza todavia con ManageEngine ni reemplaza la logica actual de Lambda.
+- Las interfaces `IInventoryProcessor`, `IInventoryNormalizer`, `IAssetConnector` e `ISecretProvider` se mantienen para futuras iteraciones sin depender de AWS.
 
 Licenciamiento:
 

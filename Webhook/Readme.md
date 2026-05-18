@@ -29,13 +29,13 @@ Claves esperadas:
 | `AutoInventario:VerifyToken` | Token esperado por `GET /webhooks` para la verificacion inicial del proveedor. |
 | `Security:PrivateKeyPath` | Ruta de clave privada local para descifrado. |
 | `WEBHOOK_PRIVATE_KEY_PATH` | Override por variable de entorno. |
-| `InventoryProcessing:Mode` | `AwsLambda` por compatibilidad temporal para invocar Lambda; `Local` para aceptar y almacenar localmente cuando se quiera desacoplar AWS. |
+| `InventoryProcessing:Mode` | `Local` para levantar el Webhook sin AWS usando el stub inicial; `AwsLambda` para invocar Lambda y mantener el flujo actual. |
 | `InventoryProcessing:AwsLambda:FunctionName` | Nombre de la Lambda cuando el modo es `AwsLambda`. |
 | `InventoryProcessing:AwsLambda:Region` | Region AWS opcional para el cliente Lambda. Si se omite, se usa la cadena de configuracion del SDK. |
-| `ManageEngine:BaseUrl` | URL base del ServiceDesk Plus local o cloud cuando `InventoryProcessing:Mode=Local`. |
-| `ManageEngine:WorkstationsPath` | Ruta del endpoint de workstations. Por defecto `/api/v3/workstations`. |
-| `ManageEngine:ApiTokenSecretName` | Nombre de la clave donde se busca el token, por ejemplo una variable de entorno. |
-| `ManageEngine:TimeoutSeconds` | Timeout HTTP para el conector local. |
+| `ManageEngine:BaseUrl` | Reservado para una futura sincronizacion local con ManageEngine. El stub actual no lo usa. |
+| `ManageEngine:WorkstationsPath` | Reservado para la futura sincronizacion local. Por defecto `/api/v3/workstations`. |
+| `ManageEngine:ApiTokenSecretName` | Reservado para la futura sincronizacion local. |
+| `ManageEngine:TimeoutSeconds` | Timeout previsto para la futura sincronizacion local. |
 | `License:Edition` | `Community/Internal`, `Professional` o `Enterprise`. |
 | `License:LicenseFilePath` | Ruta del archivo de licencia offline. Obligatoria para ediciones comerciales. |
 | `License:PublicKeyPath` | Ruta de la clave publica para validar licencias firmadas. |
@@ -87,7 +87,7 @@ En despliegues y desarrollo local, establecer `AutoInventario__ApiKey` mediante 
 El Webhook selecciona el destino de procesamiento con `InventoryProcessing:Mode`:
 
 - `AwsLambda`: modo por defecto temporal para preservar el comportamiento actual. Invoca la Lambda configurada con `InventoryProcessing:AwsLambda:FunctionName`. Las credenciales se resuelven con la AWS SDK credential chain; usar IAM Role, perfil local, variables de entorno seguras o secret store, nunca access keys hard-codeadas.
-- `Local`: valida, descifra, normaliza y envia el inventario al conector `IAssetConnector` configurado sin requerir AWS.
+- `Local`: acepta el payload ya descifrado y responde con un mensaje explicito de stub. No sincroniza todavia con ManageEngine y no requiere AWS.
 
 Ejemplo con variables de entorno:
 
@@ -101,11 +101,11 @@ Para desarrollo sin AWS:
 
 ```powershell
 $env:InventoryProcessing__Mode = "Local"
-$env:ManageEngine__BaseUrl = "<manageengine-base-url>"
-$env:MANAGEENGINE_API_TOKEN = "<secret-token>"
 ```
 
-El proveedor de secretos local busca `Secrets:<ManageEngine:ApiTokenSecretName>` en configuracion y, si no existe, una variable de entorno con ese nombre. No guardar tokens reales en archivos versionados.
+El ejemplo versionado deja `InventoryProcessing:Mode=Local` para facilitar un arranque inicial sin AWS. Si se omite el modo por completo, el runtime conserva `AwsLambda` como default temporal por compatibilidad.
+
+La futura sincronizacion local con ManageEngine seguira usando `Secrets:<ManageEngine:ApiTokenSecretName>` o una variable de entorno con ese nombre. No guardar tokens reales en archivos versionados.
 
 ## Licenciamiento
 

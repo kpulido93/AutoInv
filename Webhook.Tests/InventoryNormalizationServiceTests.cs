@@ -1,5 +1,3 @@
-using Microsoft.Extensions.Logging.Abstractions;
-using Webhook.Models;
 using Webhook.Services;
 
 namespace Webhook.Tests;
@@ -64,72 +62,4 @@ public class InventoryNormalizationServiceTests
         Assert.Equal("SystemSerialNumber-PC-001", connectorWorkstation["product"]!["name"]!.GetValue<string>());
     }
 
-    [Fact]
-    public async Task Local_processor_submits_normalized_payload_without_aws()
-    {
-        var connector = new RecordingAssetConnector(new AssetConnectorResult("test-submit", 201, true));
-        var processor = new LocalInventoryProcessor(
-            new InventoryNormalizationService(),
-            connector,
-            NullLogger<LocalInventoryProcessor>.Instance);
-
-        var result = await processor.ProcessAsync(new InventoryProcessingRequest(
-            "42",
-            "legacy",
-            "encrypted-data",
-            "encrypted-key",
-            "iv",
-            "",
-            "{\"workstation\":{\"name\":\"PC-001\",\"org_serial_number\":\"SER-001\"}}",
-            "cid-test-001"));
-
-        Assert.Equal("Evento procesado correctamente.", result.ResponseMessage);
-        Assert.Equal(1, connector.Calls);
-        Assert.Equal("SER-001", connector.LastInventory.SerialNumber);
-    }
-
-    [Fact]
-    public async Task Local_processor_rejects_invalid_payload_without_calling_connector()
-    {
-        var connector = new RecordingAssetConnector(new AssetConnectorResult("test-submit", 201, true));
-        var processor = new LocalInventoryProcessor(
-            new InventoryNormalizationService(),
-            connector,
-            NullLogger<LocalInventoryProcessor>.Instance);
-
-        await Assert.ThrowsAsync<InvalidOperationException>(() => processor.ProcessAsync(new InventoryProcessingRequest(
-            "42",
-            "legacy",
-            "encrypted-data",
-            "encrypted-key",
-            "iv",
-            "",
-            "{\"workstation\":{\"name\":\"PC-001\"}}",
-            "cid-test-001")));
-
-        Assert.Equal(0, connector.Calls);
-    }
-
-    private sealed class RecordingAssetConnector : IAssetConnector
-    {
-        private readonly AssetConnectorResult _result;
-
-        public RecordingAssetConnector(AssetConnectorResult result)
-        {
-            _result = result;
-        }
-
-        public int Calls { get; private set; }
-
-        public NormalizedInventory LastInventory { get; private set; } = null!;
-
-        public Task<AssetConnectorResult> SubmitAsync(
-            NormalizedInventory inventory,
-            CancellationToken cancellationToken = default)
-        {
-            Calls++;
-            LastInventory = inventory;
-            return Task.FromResult(_result);
-        }
-    }
 }

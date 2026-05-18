@@ -9,12 +9,12 @@ Este documento describe despliegues corporativos sin AWS para el Webhook de Auto
 | `ASPNETCORE_URLS` | URL de escucha para Kestrel o contenedor. | No |
 | `AutoInventario__ApiKey` | API key requerida por `POST /webhooks` y `GET /id-clients`. | Si |
 | `Security__PrivateKeyPath` / `WEBHOOK_PRIVATE_KEY_PATH` | Ruta de la clave privada RSA fuera del repo. | Sensible |
-| `InventoryProcessing__Mode` | `Local` para worker local; `AwsLambda` solo si se usa AWS. | No |
-| `ManageEngine__BaseUrl` | URL base de ManageEngine ServiceDesk Plus. | No |
-| `ManageEngine__WorkstationsPath` | Ruta del endpoint de workstations. | No |
-| `ManageEngine__ApiTokenSecretName` | Nombre donde `ISecretProvider` busca el token. | No |
-| `MANAGEENGINE_API_TOKEN` | Token real si `ManageEngine__ApiTokenSecretName=MANAGEENGINE_API_TOKEN`. | Si |
-| `ManageEngine__TimeoutSeconds` | Timeout HTTP del conector local. | No |
+| `InventoryProcessing__Mode` | `Local` para el stub inicial sin AWS; `AwsLambda` solo si se usa AWS. | No |
+| `ManageEngine__BaseUrl` | Reservado para una futura sincronizacion local con ManageEngine. | No |
+| `ManageEngine__WorkstationsPath` | Reservado para la futura sincronizacion local. | No |
+| `ManageEngine__ApiTokenSecretName` | Reservado para la futura sincronizacion local. | No |
+| `MANAGEENGINE_API_TOKEN` | Token real si se habilita una futura sincronizacion local. | Si |
+| `ManageEngine__TimeoutSeconds` | Timeout previsto para la futura sincronizacion local. | No |
 | `License__Edition` | `Community/Internal`, `Professional` o `Enterprise`. | No |
 | `License__LicenseFilePath` | Ruta local del archivo de licencia offline. | Sensible |
 | `License__PublicKeyPath` | Ruta local de la clave publica de verificacion. | No |
@@ -63,7 +63,7 @@ Invoke-WebRequest http://localhost:8080/health -UseBasicParsing
 
 El `docker-compose.yml` incluye:
 
-- `webhook`: ASP.NET Core `net8.0` con worker local.
+- `webhook`: ASP.NET Core `net8.0` con stub local inicial.
 - `postgres`: base PostgreSQL para PoC de `/id-clients`.
 - Health checks para Webhook y PostgreSQL.
 - Volumen para `wwwroot/updates`.
@@ -100,9 +100,7 @@ El script crea o actualiza el App Pool y el sitio, pero no escribe secretos. Con
 - `AutoInventario__ApiKey`
 - `Security__PrivateKeyPath` o `WEBHOOK_PRIVATE_KEY_PATH`
 - `InventoryProcessing__Mode=Local`
-- `ManageEngine__BaseUrl`
-- `ManageEngine__ApiTokenSecretName`
-- variable o secreto real referenciado por `ManageEngine__ApiTokenSecretName`
+- `ManageEngine__BaseUrl` y `ManageEngine__ApiTokenSecretName` solo si se prepara una futura sincronizacion local
 - `ConnectionStrings__Postgres`, si se usa `/id-clients`
 - `License__Edition=Enterprise`, `License__LicenseFilePath` y `License__PublicKeyPath` si el despliegue es comercial.
 

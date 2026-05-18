@@ -71,8 +71,8 @@ No usar `algorithm=none` en `Professional` o `Enterprise`; el validador lo recha
 
 - `AutoInventario__ApiKey` configurada fuera del repo.
 - `Security__PrivateKeyPath` o `WEBHOOK_PRIVATE_KEY_PATH` apunta a una clave privada con ACL restringidas.
-- `InventoryProcessing__Mode=Local` si no se usa AWS.
-- `ManageEngine__ApiTokenSecretName` apunta a un secreto real fuera del repo.
+- `InventoryProcessing__Mode=Local` si no se usa AWS y se acepta el stub inicial.
+- `ManageEngine__ApiTokenSecretName` apunta a un secreto real fuera del repo solo si se habilita una futura sincronizacion local.
 - `License__Edition` coincide con el archivo de licencia.
 - `License__LicenseFilePath` apunta a un archivo local protegido.
 - `License__PublicKeyPath` apunta a la clave publica de verificacion.
