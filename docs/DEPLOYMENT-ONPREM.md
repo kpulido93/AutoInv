@@ -45,13 +45,22 @@ La imagen no copia `appsettings.json` reales y espera configuracion por variable
 
 ## Docker Compose
 
+`docker-compose.yml` define una PoC minima con un solo servicio `webhook` en `InventoryProcessing__Mode=Local` y `SecretProvider__Mode=Environment`.
+
 1. Crear configuracion local ignorada por Git:
 
 ```powershell
 Copy-Item .env.example .env
 ```
 
-2. Editar `.env` con valores del entorno. No imprimir ni compartir el contenido si contiene secretos.
+2. Editar `.env` y reemplazar placeholders:
+
+- `AUTOINVENTARIO_API_KEY`
+- `AUTOINVENTARIO_VERIFY_TOKEN`
+- `WEBHOOK_PRIVATE_KEY_PATH`
+- `AUTOINVENTARIO_POSTGRES_CONNECTION_STRING`
+
+No imprimir ni compartir el contenido si contiene secretos.
 
 3. Colocar la clave privada fuera del repo o en `.\secrets\private.key`. La ruta se configura con `WEBHOOK_PRIVATE_KEY_PATH`.
 
@@ -66,8 +75,8 @@ Para entornos reales usar `.env`, pero no copiar la salida de `docker compose co
 5. Construir y levantar:
 
 ```powershell
-docker build -f Webhook\Dockerfile -t autoinventario-webhook:local .
-docker compose --env-file .env up -d --build
+docker compose --env-file .env build
+docker compose --env-file .env up -d
 ```
 
 6. Comprobar salud:
@@ -79,11 +88,9 @@ Invoke-WebRequest http://localhost:8080/health -UseBasicParsing
 El `docker-compose.yml` incluye:
 
 - `webhook`: ASP.NET Core `net8.0` con stub local inicial.
-- `postgres`: base PostgreSQL para PoC de `/id-clients`.
-- Health checks para Webhook y PostgreSQL.
-- Volumen para `wwwroot/updates`.
+- Health check del Webhook.
 
-En produccion se puede sustituir `postgres` por una base corporativa y configurar `ConnectionStrings__Postgres` directamente.
+No se incluye base de datos en esta PoC. `GET /id-clients` no forma parte del escenario minimo y hoy el servicio sigue validando `ConnectionStrings:Postgres` al iniciar, por lo que `.env.example` mantiene un placeholder no vacio. Para usar `/id-clients`, reemplazarlo por una conexion real a PostgreSQL o ajustar ese comportamiento en otro cambio.
 
 ## IIS en Windows Server
 
@@ -152,7 +159,7 @@ El script registra variables no secretas en el entorno del servicio. Los secreto
 ```powershell
 dotnet publish Webhook\Webhook-Inventario.csproj -c Release
 docker compose --env-file .env.example config
-docker build -f Webhook\Dockerfile -t autoinventario-webhook:local .
+docker compose --env-file .env.example build
 ```
 
 Para una prueba funcional local con Docker, crear `.env` desde `.env.example`, montar una clave privada de prueba y enviar un payload cifrado valido a `POST /webhooks` con `X-AutoInventario-Key`.
