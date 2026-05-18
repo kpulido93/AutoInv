@@ -151,6 +151,10 @@ terraform apply
 
 Revisar [docs/OPERATIONS.md](docs/OPERATIONS.md) antes de desplegar.
 
+## Guias
+
+- Soporte del agente en Windows Server: [docs/AGENT-WINDOWS-SERVER.md](docs/AGENT-WINDOWS-SERVER.md)
+
 ## Seguridad
 
 El proyecto maneja datos sensibles: identificadores de hardware, usuarios locales, IPs, licencias y contrasenas de recuperacion BitLocker. La operacion debe tener base legal, retencion definida y controles de acceso.
