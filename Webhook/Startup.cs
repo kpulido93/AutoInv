@@ -104,10 +104,11 @@ namespace Webhook
             services.AddSingleton<IInventoryProcessor>(serviceProvider =>
             {
                 var options = serviceProvider.GetRequiredService<IOptions<InventoryProcessingOptions>>().Value;
-                var mode = options.Mode?.Trim();
+                var mode = string.IsNullOrWhiteSpace(options.Mode)
+                    ? InventoryProcessingModes.AwsLambda
+                    : options.Mode.Trim();
 
-                if (string.Equals(mode, InventoryProcessingModes.Local, StringComparison.OrdinalIgnoreCase) ||
-                    string.IsNullOrWhiteSpace(mode))
+                if (string.Equals(mode, InventoryProcessingModes.Local, StringComparison.OrdinalIgnoreCase))
                 {
                     return serviceProvider.GetRequiredService<LocalInventoryProcessor>();
                 }

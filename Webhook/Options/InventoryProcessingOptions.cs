@@ -4,7 +4,7 @@ public sealed class InventoryProcessingOptions
 {
     public const string SectionName = "InventoryProcessing";
 
-    public string Mode { get; set; } = InventoryProcessingModes.Local;
+    public string Mode { get; set; } = InventoryProcessingModes.AwsLambda;
 
     public AwsOptions AwsLambda { get; set; } = new();
 }

@@ -29,7 +29,7 @@ Claves esperadas:
 | `AutoInventario:VerifyToken` | Token esperado por `GET /webhooks` para la verificacion inicial del proveedor. |
 | `Security:PrivateKeyPath` | Ruta de clave privada local para descifrado. |
 | `WEBHOOK_PRIVATE_KEY_PATH` | Override por variable de entorno. |
-| `InventoryProcessing:Mode` | `Local` para aceptar y almacenar localmente; `AwsLambda` para invocar Lambda. |
+| `InventoryProcessing:Mode` | `AwsLambda` por compatibilidad temporal para invocar Lambda; `Local` para aceptar y almacenar localmente cuando se quiera desacoplar AWS. |
 | `InventoryProcessing:AwsLambda:FunctionName` | Nombre de la Lambda cuando el modo es `AwsLambda`. |
 | `InventoryProcessing:AwsLambda:Region` | Region AWS opcional para el cliente Lambda. Si se omite, se usa la cadena de configuracion del SDK. |
 | `ManageEngine:BaseUrl` | URL base del ServiceDesk Plus local o cloud cuando `InventoryProcessing:Mode=Local`. |
@@ -80,8 +80,8 @@ En despliegues y desarrollo local, establecer `AutoInventario__ApiKey` mediante 
 
 El Webhook selecciona el destino de procesamiento con `InventoryProcessing:Mode`:
 
-- `Local`: modo por defecto. El Webhook valida, descifra, normaliza y envia el inventario al conector `IAssetConnector` configurado sin requerir AWS.
-- `AwsLambda`: invoca la Lambda configurada con `InventoryProcessing:AwsLambda:FunctionName`. Las credenciales se resuelven con la AWS SDK credential chain; usar IAM Role, perfil local, variables de entorno seguras o secret store, nunca access keys hard-codeadas.
+- `AwsLambda`: modo por defecto temporal para preservar el comportamiento actual. Invoca la Lambda configurada con `InventoryProcessing:AwsLambda:FunctionName`. Las credenciales se resuelven con la AWS SDK credential chain; usar IAM Role, perfil local, variables de entorno seguras o secret store, nunca access keys hard-codeadas.
+- `Local`: valida, descifra, normaliza y envia el inventario al conector `IAssetConnector` configurado sin requerir AWS.
 
 Ejemplo con variables de entorno:
 

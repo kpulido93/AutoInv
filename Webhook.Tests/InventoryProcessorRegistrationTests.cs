@@ -7,6 +7,20 @@ namespace Webhook.Tests;
 public class InventoryProcessorRegistrationTests
 {
     [Fact]
+    public void Unspecified_mode_resolves_lambda_processor_to_preserve_current_behavior()
+    {
+        using var provider = BuildProvider(new Dictionary<string, string?>
+        {
+            ["InventoryProcessing:AwsLambda:FunctionName"] = "test-function",
+            ["InventoryProcessing:AwsLambda:Region"] = "us-east-1"
+        });
+
+        var processor = provider.GetRequiredService<IInventoryProcessor>();
+
+        Assert.IsType<AwsLambdaInventoryProcessor>(processor);
+    }
+
+    [Fact]
     public void Local_mode_resolves_local_processor()
     {
         using var provider = BuildProvider(new Dictionary<string, string?>
