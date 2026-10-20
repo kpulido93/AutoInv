@@ -46,6 +46,9 @@ namespace AutoInventario.Models
 
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public string? name { get; set; }
+
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public string? state { get; set; }
     }
 
     [SupportedOSPlatform("windows")]

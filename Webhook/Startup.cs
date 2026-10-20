@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 
 using Amazon;
 using Amazon.Lambda;
@@ -34,13 +35,100 @@ namespace Webhook
             services.AddHealthChecks();
             services.AddMemoryCache();
             services.AddSingleton<EventStore>();
-            services.Configure<InventoryProcessingOptions>(
-                _configuration.GetSection(InventoryProcessingOptions.SectionName));
+            services.AddOptions<AutoInventarioOptions>()
+                .Bind(_configuration.GetSection(AutoInventarioOptions.SectionName))
+                .Validate(options => !string.IsNullOrWhiteSpace(options.ApiKey),
+                    $"{AutoInventarioOptions.SectionName}:ApiKey is required.")
+                .ValidateOnStart();
+            services.AddOptions<ConnectionStringsOptions>()
+                .Bind(_configuration.GetSection(ConnectionStringsOptions.SectionName))
+                .Validate(options => !string.IsNullOrWhiteSpace(options.Postgres),
+                    $"{ConnectionStringsOptions.SectionName}:Postgres is required.")
+                .ValidateOnStart();
+            services.AddOptions<SecurityOptions>()
+                .Bind(_configuration.GetSection(SecurityOptions.SectionName))
+                .Validate(options => !string.IsNullOrWhiteSpace(options.PrivateKeyPath),
+                    $"{SecurityOptions.SectionName}:PrivateKeyPath is required.")
+                .Validate(options => File.Exists(options.PrivateKeyPath),
+                    "Configured private key file was not found.")
+                .ValidateOnStart();
+            services.PostConfigure<SecurityOptions>(options =>
+            {
+                if (string.IsNullOrWhiteSpace(options.PrivateKeyPath))
+                {
+                    options.PrivateKeyPath = GetDefaultPrivateKeyPath();
+                }
+            });
+            services.AddOptions<InventoryProcessingOptions>()
+                .Bind(_configuration.GetSection(InventoryProcessingOptions.SectionName))
+                .Validate(options =>
+                {
+                    var mode = options.Mode?.Trim();
+                    return string.IsNullOrWhiteSpace(mode) ||
+                           string.Equals(mode, InventoryProcessingModes.Local, StringComparison.OrdinalIgnoreCase) ||
+                           string.Equals(mode, InventoryProcessingModes.AwsLambda, StringComparison.OrdinalIgnoreCase);
+                }, "InventoryProcessing:Mode must be Local or AwsLambda.")
+                .Validate(options =>
+                {
+                    if (!string.Equals(options.Mode, InventoryProcessingModes.AwsLambda, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return true;
+                    }
+
+                    return !string.IsNullOrWhiteSpace(options.AwsLambda.FunctionName);
+                }, "InventoryProcessing:AwsLambda:FunctionName is required when InventoryProcessing:Mode is AwsLambda.")
+                .ValidateOnStart();
+            services.AddOptions<AwsOptions>()
+                .Bind(_configuration.GetSection(AwsOptions.SectionName))
+                .Validate(
+                    _ => !HasForbiddenAwsCredentialConfiguration(_configuration.GetSection(AwsOptions.SectionName)),
+                    "Do not configure AWS credentials under InventoryProcessing:AwsLambda. Use IAM Role, AWS SDK profiles, or the default credential chain.")
+                .ValidateOnStart();
+            services.AddOptions<SecretProviderOptions>()
+                .Bind(_configuration.GetSection(SecretProviderOptions.SectionName))
+                .Validate(options =>
+                {
+                    var mode = options.Mode?.Trim();
+                    return string.IsNullOrWhiteSpace(mode) ||
+                           string.Equals(mode, SecretProviderModes.Environment, StringComparison.OrdinalIgnoreCase) ||
+                           string.Equals(mode, SecretProviderModes.File, StringComparison.OrdinalIgnoreCase);
+                }, "SecretProvider:Mode must be Environment or File.")
+                .Validate(options =>
+                {
+                    if (!string.Equals(options.Mode, SecretProviderModes.File, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return true;
+                    }
+
+                    return !string.IsNullOrWhiteSpace(options.File.BasePath);
+                }, "SecretProvider:File:BasePath is required when SecretProvider:Mode is File.")
+                .ValidateOnStart();
             services.Configure<ManageEngineOptions>(
                 _configuration.GetSection(ManageEngineOptions.SectionName));
             services.Configure<LicenseOptions>(
                 _configuration.GetSection(LicenseOptions.SectionName));
-            services.AddSingleton<ISecretProvider, ConfigurationSecretProvider>();
+            services.AddSingleton<EnvironmentSecretProvider>();
+            services.AddSingleton<FileSecretProvider>();
+            services.AddSingleton<ISecretProvider>(serviceProvider =>
+            {
+                var options = serviceProvider.GetRequiredService<IOptions<SecretProviderOptions>>().Value;
+                var mode = string.IsNullOrWhiteSpace(options.Mode)
+                    ? SecretProviderModes.Environment
+                    : options.Mode.Trim();
+
+                if (string.Equals(mode, SecretProviderModes.File, StringComparison.OrdinalIgnoreCase))
+                {
+                    return serviceProvider.GetRequiredService<FileSecretProvider>();
+                }
+
+                if (string.Equals(mode, SecretProviderModes.Environment, StringComparison.OrdinalIgnoreCase))
+                {
+                    return serviceProvider.GetRequiredService<EnvironmentSecretProvider>();
+                }
+
+                throw new InvalidOperationException(
+                    $"Unsupported secret provider mode '{options.Mode}'. Use Environment or File.");
+            });
             services.AddSingleton<IDecryptionService, DecryptionService>();
             services.AddSingleton<ILicenseValidator, OfflineLicenseValidator>();
             services.AddHostedService<LicenseStartupValidationService>();
@@ -60,10 +148,11 @@ namespace Webhook
             services.AddSingleton<IInventoryProcessor>(serviceProvider =>
             {
                 var options = serviceProvider.GetRequiredService<IOptions<InventoryProcessingOptions>>().Value;
-                var mode = options.Mode?.Trim();
+                var mode = string.IsNullOrWhiteSpace(options.Mode)
+                    ? InventoryProcessingModes.AwsLambda
+                    : options.Mode.Trim();
 
-                if (string.Equals(mode, InventoryProcessingModes.Local, StringComparison.OrdinalIgnoreCase) ||
-                    string.IsNullOrWhiteSpace(mode))
+                if (string.Equals(mode, InventoryProcessingModes.Local, StringComparison.OrdinalIgnoreCase))
                 {
                     return serviceProvider.GetRequiredService<LocalInventoryProcessor>();
                 }
@@ -125,18 +214,8 @@ namespace Webhook
 
         private static IAmazonLambda CreateLambdaClient(IServiceProvider serviceProvider)
         {
-            var options = serviceProvider.GetRequiredService<IOptions<InventoryProcessingOptions>>().Value;
-            var regionName = options.AwsLambda.Region;
-
-            if (string.IsNullOrWhiteSpace(regionName))
-            {
-                regionName = Environment.GetEnvironmentVariable("AWS_REGION");
-            }
-
-            if (string.IsNullOrWhiteSpace(regionName))
-            {
-                regionName = Environment.GetEnvironmentVariable("AWS_DEFAULT_REGION");
-            }
+            var options = serviceProvider.GetRequiredService<IOptions<AwsOptions>>().Value;
+            var regionName = options.Region;
 
             if (string.IsNullOrWhiteSpace(regionName))
             {
@@ -147,6 +226,32 @@ namespace Webhook
             {
                 RegionEndpoint = RegionEndpoint.GetBySystemName(regionName)
             });
+        }
+
+        private static string GetDefaultPrivateKeyPath()
+        {
+            return Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+                "mrbyte",
+                "Webhook",
+                "private.key");
+        }
+
+        private static bool HasForbiddenAwsCredentialConfiguration(IConfigurationSection awsSection)
+        {
+            foreach (var child in awsSection.GetChildren())
+            {
+                foreach (var forbiddenKey in AwsOptions.ForbiddenCredentialKeys)
+                {
+                    if (string.Equals(child.Key, forbiddenKey, StringComparison.OrdinalIgnoreCase) &&
+                        !string.IsNullOrWhiteSpace(child.Value))
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
         }
     }
 }

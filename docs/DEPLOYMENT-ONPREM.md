@@ -6,15 +6,16 @@ Este documento describe despliegues corporativos sin AWS para el Webhook de Auto
 
 | Variable | Uso | Secreta |
 | --- | --- | --- |
+| `ASPNETCORE_HTTP_PORTS` | Puerto HTTP interno del contenedor Docker. Default `8080`; se puede sobreescribir sin rebuild. | No |
 | `ASPNETCORE_URLS` | URL de escucha para Kestrel o contenedor. | No |
 | `AutoInventario__ApiKey` | API key requerida por `POST /webhooks` y `GET /id-clients`. | Si |
 | `Security__PrivateKeyPath` / `WEBHOOK_PRIVATE_KEY_PATH` | Ruta de la clave privada RSA fuera del repo. | Sensible |
-| `InventoryProcessing__Mode` | `Local` para worker local; `AwsLambda` solo si se usa AWS. | No |
-| `ManageEngine__BaseUrl` | URL base de ManageEngine ServiceDesk Plus. | No |
-| `ManageEngine__WorkstationsPath` | Ruta del endpoint de workstations. | No |
-| `ManageEngine__ApiTokenSecretName` | Nombre donde `ISecretProvider` busca el token. | No |
-| `MANAGEENGINE_API_TOKEN` | Token real si `ManageEngine__ApiTokenSecretName=MANAGEENGINE_API_TOKEN`. | Si |
-| `ManageEngine__TimeoutSeconds` | Timeout HTTP del conector local. | No |
+| `InventoryProcessing__Mode` | `Local` para el stub inicial sin AWS; `AwsLambda` solo si se usa AWS. | No |
+| `ManageEngine__BaseUrl` | Reservado para una futura sincronizacion local con ManageEngine. | No |
+| `ManageEngine__WorkstationsPath` | Reservado para la futura sincronizacion local. | No |
+| `ManageEngine__ApiTokenSecretName` | Reservado para la futura sincronizacion local. | No |
+| `MANAGEENGINE_API_TOKEN` | Token real si se habilita una futura sincronizacion local. | Si |
+| `ManageEngine__TimeoutSeconds` | Timeout previsto para la futura sincronizacion local. | No |
 | `License__Edition` | `Community/Internal`, `Professional` o `Enterprise`. | No |
 | `License__LicenseFilePath` | Ruta local del archivo de licencia offline. | Sensible |
 | `License__PublicKeyPath` | Ruta local de la clave publica de verificacion. | No |
@@ -28,7 +29,23 @@ El endpoint de salud es:
 GET /health
 ```
 
+## Imagen Docker
+
+El `Webhook/Dockerfile` usa cuatro etapas explicitas: `restore`, `build`, `publish` y `runtime`, todas alineadas con .NET 8.
+
+Build recomendado:
+
+```powershell
+docker build -f Webhook\Dockerfile -t autoinventario-webhook:local .
+```
+
+La primera construccion necesita acceso de red a `mcr.microsoft.com` para descargar `mcr.microsoft.com/dotnet/sdk:8.0` y `mcr.microsoft.com/dotnet/aspnet:8.0` si no estan cacheadas en el host.
+
+La imagen no copia `appsettings.json` reales y espera configuracion por variables de entorno o archivos montados fuera del repo. El contenedor escucha por defecto en `8080`; para cambiar el puerto interno sin rebuild, sobreescribir `ASPNETCORE_HTTP_PORTS`.
+
 ## Docker Compose
+
+`docker-compose.yml` define una PoC minima con un solo servicio `webhook` en `InventoryProcessing__Mode=Local` y `SecretProvider__Mode=Environment`.
 
 1. Crear configuracion local ignorada por Git:
 
@@ -36,7 +53,14 @@ GET /health
 Copy-Item .env.example .env
 ```
 
-2. Editar `.env` con valores del entorno. No imprimir ni compartir el contenido si contiene secretos.
+2. Editar `.env` y reemplazar placeholders:
+
+- `AUTOINVENTARIO_API_KEY`
+- `AUTOINVENTARIO_VERIFY_TOKEN`
+- `WEBHOOK_PRIVATE_KEY_PATH`
+- `AUTOINVENTARIO_POSTGRES_CONNECTION_STRING`
+
+No imprimir ni compartir el contenido si contiene secretos.
 
 3. Colocar la clave privada fuera del repo o en `.\secrets\private.key`. La ruta se configura con `WEBHOOK_PRIVATE_KEY_PATH`.
 
@@ -51,8 +75,8 @@ Para entornos reales usar `.env`, pero no copiar la salida de `docker compose co
 5. Construir y levantar:
 
 ```powershell
-docker build -f Webhook\Dockerfile -t autoinventario-webhook:local .
-docker compose --env-file .env up -d --build
+docker compose --env-file .env build
+docker compose --env-file .env up -d
 ```
 
 6. Comprobar salud:
@@ -63,14 +87,14 @@ Invoke-WebRequest http://localhost:8080/health -UseBasicParsing
 
 El `docker-compose.yml` incluye:
 
-- `webhook`: ASP.NET Core `net8.0` con worker local.
-- `postgres`: base PostgreSQL para PoC de `/id-clients`.
-- Health checks para Webhook y PostgreSQL.
-- Volumen para `wwwroot/updates`.
+- `webhook`: ASP.NET Core `net8.0` con stub local inicial.
+- Health check del Webhook.
 
-En produccion se puede sustituir `postgres` por una base corporativa y configurar `ConnectionStrings__Postgres` directamente.
+No se incluye base de datos en esta PoC. `GET /id-clients` no forma parte del escenario minimo y hoy el servicio sigue validando `ConnectionStrings:Postgres` al iniciar, por lo que `.env.example` mantiene un placeholder no vacio. Para usar `/id-clients`, reemplazarlo por una conexion real a PostgreSQL o ajustar ese comportamiento en otro cambio.
 
 ## IIS en Windows Server
+
+La guia detallada de IIS vive en `docs/DEPLOYMENT-IIS.md`. Esta seccion deja solo el resumen operativo.
 
 Prerequisitos:
 
@@ -100,9 +124,7 @@ El script crea o actualiza el App Pool y el sitio, pero no escribe secretos. Con
 - `AutoInventario__ApiKey`
 - `Security__PrivateKeyPath` o `WEBHOOK_PRIVATE_KEY_PATH`
 - `InventoryProcessing__Mode=Local`
-- `ManageEngine__BaseUrl`
-- `ManageEngine__ApiTokenSecretName`
-- variable o secreto real referenciado por `ManageEngine__ApiTokenSecretName`
+- `ManageEngine__BaseUrl` y `ManageEngine__ApiTokenSecretName` solo si se prepara una futura sincronizacion local
 - `ConnectionStrings__Postgres`, si se usa `/id-clients`
 - `License__Edition=Enterprise`, `License__LicenseFilePath` y `License__PublicKeyPath` si el despliegue es comercial.
 
@@ -139,7 +161,7 @@ El script registra variables no secretas en el entorno del servicio. Los secreto
 ```powershell
 dotnet publish Webhook\Webhook-Inventario.csproj -c Release
 docker compose --env-file .env.example config
-docker build -f Webhook\Dockerfile -t autoinventario-webhook:local .
+docker compose --env-file .env.example build
 ```
 
 Para una prueba funcional local con Docker, crear `.env` desde `.env.example`, montar una clave privada de prueba y enviar un payload cifrado valido a `POST /webhooks` con `X-AutoInventario-Key`.

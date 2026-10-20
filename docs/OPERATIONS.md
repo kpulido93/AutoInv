@@ -9,13 +9,14 @@ git status --short --branch
 git diff --name-status
 ```
 
-La estructura canonica del agente es la raiz del repositorio. No usar rutas antiguas bajo `Autoinventario/`; la solucion, los tests y el pipeline deben apuntar a `AutoInventario.csproj`.
+La estructura canonica del agente es la raiz del repositorio. No usar rutas antiguas bajo `Autoinventario/`; la solucion, los tests y el pipeline deben apuntar solo a `AutoInventario.csproj`.
 
 ## Build local
 
 Comandos utiles:
 
 ```powershell
+dotnet restore Webhook\Webhook-Inventario.csproj
 dotnet build AutoInventario.sln -c Debug
 dotnet build AutoInventario.csproj -c Debug
 dotnet build AutoInventario.Updater\AutoInventario.Updater.csproj -c Debug
@@ -30,7 +31,7 @@ Estado esperado:
 - La solucion compila con `dotnet build AutoInventario.sln -c Debug`.
 - El proyecto raiz del agente compila con `dotnet build AutoInventario.csproj -c Debug`.
 - Updater compila.
-- Webhook compila en `net8.0` sin warnings.
+- Webhook compila en `net8.0` sin warnings y mantiene `Startup` para no cambiar endpoints ni middleware al migrar.
 - Tests referencian el proyecto raiz del agente.
 - Lambda pasa validacion de sintaxis.
 
@@ -64,9 +65,8 @@ Configuracion esperada:
 - `ConnectionStrings__Postgres`
 - `AutoInventario__ApiKey`
 - `Security__PrivateKeyPath` o `WEBHOOK_PRIVATE_KEY_PATH`
-- `InventoryProcessing__Mode=Local` para ejecutar sin AWS.
-- `ManageEngine__BaseUrl` y `ManageEngine__WorkstationsPath` para el conector local.
-- `ManageEngine__ApiTokenSecretName` apuntando al nombre de variable/clave donde vive el token.
+- `InventoryProcessing__Mode=Local` para ejecutar sin AWS usando el stub inicial.
+- `ManageEngine__BaseUrl`, `ManageEngine__WorkstationsPath` y `ManageEngine__ApiTokenSecretName` solo para la futura sincronizacion local; el stub actual no los requiere.
 - `InventoryProcessing__Mode=AwsLambda` solo cuando se quiera invocar Lambda.
 - `InventoryProcessing__AwsLambda__FunctionName` cuando el modo sea `AwsLambda`.
 - `InventoryProcessing__AwsLambda__Region`, `AWS_REGION` o `AWS_DEFAULT_REGION` cuando el entorno no aporte region al SDK.

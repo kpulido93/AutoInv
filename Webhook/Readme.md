@@ -11,6 +11,13 @@ API ASP.NET Core que recibe inventario cifrado desde el agente AutoInventario, e
 
 El proyecto compila en `net8.0`. Mantener dependencias actualizadas y validar vulnerabilidades NuGet antes de publicar.
 
+## Compatibilidad .NET
+
+- El proyecto canonico del servicio es `Webhook/Webhook-Inventario.csproj` y apunta a `net8.0`.
+- `Program.cs` mantiene el patron `Startup` sobre ASP.NET Core 8 para conservar endpoints, middleware y configuracion sin cambiar contratos.
+- La configuracion sensible se centraliza con Options Pattern; `Program.cs` concentra los overrides de variables de entorno legadas y `Startup` valida la configuracion critica al iniciar.
+- `Dockerfile` usa `mcr.microsoft.com/dotnet/sdk:8.0` y `mcr.microsoft.com/dotnet/aspnet:8.0`, alineado con el runtime soportado.
+
 ## Configuracion
 
 Claves esperadas:
@@ -19,15 +26,18 @@ Claves esperadas:
 | --- | --- |
 | `ConnectionStrings:Postgres` | Conexion de lectura para listar clientes. |
 | `AutoInventario:ApiKey` | Valor esperado por `X-AutoInventario-Key` en rutas protegidas. |
+| `AutoInventario:VerifyToken` | Token esperado por `GET /webhooks` para la verificacion inicial del proveedor. |
 | `Security:PrivateKeyPath` | Ruta de clave privada local para descifrado. |
 | `WEBHOOK_PRIVATE_KEY_PATH` | Override por variable de entorno. |
-| `InventoryProcessing:Mode` | `Local` para aceptar y almacenar localmente; `AwsLambda` para invocar Lambda. |
+| `SecretProvider:Mode` | `Environment` para leer secretos desde variables protegidas; `File` solo para desarrollo local con archivos fuera del repo. |
+| `SecretProvider:File:BasePath` | Carpeta base del proveedor `File`. Cada secreto se resuelve como un archivo con el mismo nombre del secreto. |
+| `InventoryProcessing:Mode` | `Local` para levantar el Webhook sin AWS usando el stub inicial; `AwsLambda` para invocar Lambda y mantener el flujo actual. |
 | `InventoryProcessing:AwsLambda:FunctionName` | Nombre de la Lambda cuando el modo es `AwsLambda`. |
 | `InventoryProcessing:AwsLambda:Region` | Region AWS opcional para el cliente Lambda. Si se omite, se usa la cadena de configuracion del SDK. |
-| `ManageEngine:BaseUrl` | URL base del ServiceDesk Plus local o cloud cuando `InventoryProcessing:Mode=Local`. |
-| `ManageEngine:WorkstationsPath` | Ruta del endpoint de workstations. Por defecto `/api/v3/workstations`. |
-| `ManageEngine:ApiTokenSecretName` | Nombre de la clave donde se busca el token, por ejemplo una variable de entorno. |
-| `ManageEngine:TimeoutSeconds` | Timeout HTTP para el conector local. |
+| `ManageEngine:BaseUrl` | Reservado para una futura sincronizacion local con ManageEngine. El stub actual no lo usa. |
+| `ManageEngine:WorkstationsPath` | Reservado para la futura sincronizacion local. Por defecto `/api/v3/workstations`. |
+| `ManageEngine:ApiTokenSecretName` | Reservado para la futura sincronizacion local. |
+| `ManageEngine:TimeoutSeconds` | Timeout previsto para la futura sincronizacion local. |
 | `License:Edition` | `Community/Internal`, `Professional` o `Enterprise`. |
 | `License:LicenseFilePath` | Ruta del archivo de licencia offline. Obligatoria para ediciones comerciales. |
 | `License:PublicKeyPath` | Ruta de la clave publica para validar licencias firmadas. |
@@ -37,14 +47,60 @@ Claves esperadas:
 
 No guardar valores reales en `appsettings.json`.
 
+Opciones tipadas actuales:
+
+- `AutoInventarioOptions`: API key y verify token.
+- `SecurityOptions`: ruta efectiva de la clave privada.
+- `SecretProviderOptions`: seleccion del proveedor de secretos y carpeta base opcional para desarrollo local.
+- `ConnectionStringsOptions`: cadena `Postgres`.
+- `InventoryProcessingOptions` y `AwsOptions`: modo de procesamiento, Lambda name y region.
+
+Variables de entorno recomendadas:
+
+- `ConnectionStrings__Postgres`
+- `AutoInventario__ApiKey`
+- `AutoInventario__VerifyToken`
+- `Security__PrivateKeyPath`
+- `SecretProvider__Mode`
+- `SecretProvider__File__BasePath`
+- `InventoryProcessing__Mode`
+- `InventoryProcessing__AwsLambda__FunctionName`
+- `InventoryProcessing__AwsLambda__Region`
+
+Compatibilidad legada mantenida:
+
+- `WEBHOOK_PRIVATE_KEY_PATH` sigue sobreescribiendo `Security:PrivateKeyPath`.
+- `SECRET_PROVIDER_MODE` y `SECRET_PROVIDER_FILE_BASE_PATH` se aceptan como aliases simples para desarrollo y bootstrap.
+- `AUTOINVENTARIO_LAMBDA_NAME` sigue poblando `InventoryProcessing:AwsLambda:FunctionName`.
+- `AWS_REGION` y `AWS_DEFAULT_REGION` siguen poblando `InventoryProcessing:AwsLambda:Region`.
+
+Resolucion actual de secretos:
+
+- `SecretProvider:Mode=Environment` busca primero una variable de entorno con el nombre solicitado.
+- Si esa variable no existe, el proveedor `Environment` mantiene compatibilidad con `Secrets:<nombre>` en configuracion.
+- `SecretProvider:Mode=File` lee un archivo fuera del repo ubicado en `SecretProvider:File:BasePath\<nombre-del-secreto>`.
+- Produccion debe usar variables protegidas, store seguro del host o un proveedor externo equivalente; `File` queda solo para desarrollo local controlado.
+
+Regla de credenciales AWS:
+
+- `InventoryProcessing:AwsLambda` solo admite `FunctionName` y `Region`; no se aceptan `AccessKeyId`, `SecretAccessKey` ni `SessionToken` en `appsettings` o configuracion inline.
+- En AWS, desplegar con IAM Role, instance profile o task role para que el SDK resuelva credenciales sin secretos en el Webhook.
+- Fuera de AWS, usar `AWS_PROFILE` u otro mecanismo estandar soportado por la default credential chain del AWS SDK en el host, nunca credenciales embebidas en JSON o codigo.
+
+Validacion en arranque:
+
+- El servicio falla temprano si faltan `AutoInventario:ApiKey`, `ConnectionStrings:Postgres` o una ruta valida de `Security:PrivateKeyPath`.
+- Si `InventoryProcessing:Mode=AwsLambda`, tambien exige `InventoryProcessing:AwsLambda:FunctionName`.
+- Si no se configura `Security:PrivateKeyPath`, el servicio intenta `%ProgramData%\mrbyte\Webhook\private.key` antes de validar.
+
 En despliegues y desarrollo local, establecer `AutoInventario__ApiKey` mediante variable de entorno, secret store o variable secreta del pipeline.
 
 ## Procesamiento de inventario
 
 El Webhook selecciona el destino de procesamiento con `InventoryProcessing:Mode`:
 
-- `Local`: modo por defecto. El Webhook valida, descifra, normaliza y envia el inventario al conector `IAssetConnector` configurado sin requerir AWS.
-- `AwsLambda`: invoca la Lambda configurada con `InventoryProcessing:AwsLambda:FunctionName`. Las credenciales se resuelven con la AWS SDK credential chain; usar IAM Role, perfil local, variables de entorno seguras o secret store, nunca access keys hard-codeadas.
+- `AwsLambda`: modo por defecto temporal para preservar el comportamiento actual. Invoca la Lambda configurada con `InventoryProcessing:AwsLambda:FunctionName`. Las credenciales se resuelven con la AWS SDK credential chain; usar IAM Role, perfil local, variables de entorno seguras o secret store, nunca access keys hard-codeadas.
+- `Local`: acepta el payload ya descifrado y responde con un mensaje explicito de stub. No sincroniza todavia con ManageEngine y no requiere AWS.
 
 Ejemplo con variables de entorno:
 
@@ -58,11 +114,11 @@ Para desarrollo sin AWS:
 
 ```powershell
 $env:InventoryProcessing__Mode = "Local"
-$env:ManageEngine__BaseUrl = "<manageengine-base-url>"
-$env:MANAGEENGINE_API_TOKEN = "<secret-token>"
 ```
 
-El proveedor de secretos local busca `Secrets:<ManageEngine:ApiTokenSecretName>` en configuracion y, si no existe, una variable de entorno con ese nombre. No guardar tokens reales en archivos versionados.
+El ejemplo versionado deja `InventoryProcessing:Mode=Local` para facilitar un arranque inicial sin AWS. Si se omite el modo por completo, el runtime conserva `AwsLambda` como default temporal por compatibilidad.
+
+La futura sincronizacion local con ManageEngine seguira usando `ISecretProvider`. En `Environment` se resuelve por variable de entorno y luego por `Secrets:<ManageEngine:ApiTokenSecretName>` para compatibilidad. En `File`, el secreto debe vivir en un archivo local fuera del repo con ese mismo nombre. No guardar tokens reales en archivos versionados.
 
 ## Licenciamiento
 
@@ -84,6 +140,10 @@ Rutas protegidas por API key:
 
 - `POST /webhooks`
 - `GET /id-clients`
+
+Ruta no protegida por API key:
+
+- `GET /webhooks` para la verificacion inicial del proveedor; usa `hub.verify_token` y se valida contra `AutoInventario:VerifyToken`.
 
 Header requerido:
 
@@ -116,13 +176,14 @@ Todas las respuestas incluyen `X-Correlation-ID`. Si el cliente envia ese header
 ## Build y ejecucion
 
 ```powershell
+dotnet restore Webhook\Webhook-Inventario.csproj
 dotnet build Webhook\Webhook-Inventario.csproj -c Debug
 dotnet list Webhook\Webhook-Inventario.csproj package --vulnerable --include-transitive
 dotnet test Webhook.Tests\Webhook.Tests.csproj -c Debug
 dotnet run --project Webhook\Webhook-Inventario.csproj
 ```
 
-Validacion esperada: compila sin warning `NETSDK1138` y sin vulnerabilidades NuGet reportadas por los orígenes configurados.
+Validacion esperada: `restore` y `build` finalizan correctamente en `net8.0`, sin warning `NETSDK1138`, y el scan NuGet no reporta vulnerabilidades activas en los origenes configurados.
 
 Para despliegue Docker Compose, IIS o Windows Service, ver `docs/DEPLOYMENT-ONPREM.md`.
 
@@ -134,16 +195,26 @@ Sin credencial:
 Invoke-WebRequest http://localhost:<puerto>/webhooks -Method Post -Body '{}' -ContentType 'application/json'
 ```
 
+Resultado esperado: `401 Unauthorized`.
+
 Credencial invalida:
 
 ```powershell
 Invoke-WebRequest http://localhost:<puerto>/webhooks -Method Post -Body '{}' -ContentType 'application/json' -Headers @{ "X-AutoInventario-Key" = "invalid" }
 ```
 
+Resultado esperado: `403 Forbidden`.
+
 Credencial valida:
 
 ```powershell
 Invoke-WebRequest http://localhost:<puerto>/webhooks -Method Post -Body '<payload-cifrado>' -ContentType 'application/json' -Headers @{ "X-AutoInventario-Key" = "<api-key>"; "X-Correlation-ID" = "<correlation-id>" }
+```
+
+Verificacion GET del proveedor:
+
+```powershell
+Invoke-WebRequest "http://localhost:<puerto>/webhooks?hub.mode=subscribe&hub.challenge=123&hub.verify_token=<verify-token>"
 ```
 
 ## Riesgos actuales

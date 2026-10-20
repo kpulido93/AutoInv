@@ -2,9 +2,10 @@ using System;
 using System.IO;
 using System.Security.Cryptography;
 using System.Text;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Models;
+using Webhook.Options;
 
 namespace Webhook.Services;
 
@@ -19,13 +20,13 @@ public sealed class DecryptionService : IDecryptionService
 {
     public const string CurrentCryptoVersion = "2";
 
-    private readonly IConfiguration _configuration;
+    private readonly IOptions<SecurityOptions> _options;
     private readonly ILogger<DecryptionService> _logger;
     private string _cachedPrivateKey = string.Empty;
 
-    public DecryptionService(IConfiguration configuration, ILogger<DecryptionService> logger)
+    public DecryptionService(IOptions<SecurityOptions> options, ILogger<DecryptionService> logger)
     {
-        _configuration = configuration;
+        _options = options;
         _logger = logger;
     }
 
@@ -132,23 +133,7 @@ public sealed class DecryptionService : IDecryptionService
 
     private string ResolvePrivateKeyPath()
     {
-        var path = Environment.GetEnvironmentVariable("WEBHOOK_PRIVATE_KEY_PATH");
-
-        if (string.IsNullOrWhiteSpace(path))
-        {
-            path = _configuration["Security:PrivateKeyPath"];
-        }
-
-        if (string.IsNullOrWhiteSpace(path))
-        {
-            path = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
-                "mrbyte",
-                "Webhook",
-                "private.key");
-        }
-
-        return path;
+        return _options.Value.PrivateKeyPath;
     }
 
     private string LoadPrivateKey()

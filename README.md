@@ -6,14 +6,14 @@ AutoInventario es una suite para recopilar inventario de equipos Windows, cifrar
 
 La estructura canonica del agente es la raiz del repositorio. `AutoInventario.csproj`, `Program.cs`, `Helpers/`, `Models/`, `Services/` y `Resources/` pertenecen al agente Windows.
 
-La solucion, los tests y el pipeline principal apuntan al proyecto raiz `AutoInventario.csproj`.
+La solucion, los tests y el pipeline principal apuntan solo al proyecto raiz `AutoInventario.csproj`. La ruta historica `Autoinventario/AutoInventario.csproj` ya no forma parte de la estructura canonica del agente y no debe reintroducirse.
 
 Resumen de validaciones principales:
 
 | Validacion | Resultado |
 | --- | --- |
-| `dotnet build AutoInventario.sln -c Debug` | Compila; pueden quedar warnings nullable del agente. |
-| `dotnet build AutoInventario.csproj -c Debug` | Compila con un warning nullable en `Helpers/UserSystemHelper.cs`. |
+| `dotnet build AutoInventario.sln -c Debug` | Correcto; `0` warnings y `0` errores. |
+| `dotnet build AutoInventario.csproj -c Debug` | Correcto; `0` warnings y `0` errores. |
 | `dotnet build AutoInventario.Updater/AutoInventario.Updater.csproj -c Debug` | Correcto. |
 | `dotnet build Webhook/Webhook-Inventario.csproj -c Debug` | Correcto en `net8.0`, sin warnings. |
 | `dotnet test AutoInventario.Tests/AutoInventario.Tests.csproj -c Debug` | Correcto; referencia el proyecto raiz del agente. |
@@ -42,7 +42,7 @@ Componentes principales:
 
 - Agente Windows: ejecutable .NET 8 que recopila datos por WMI, registro y APIs de Windows, cifra el inventario y lo envia al Webhook.
 - Updater: ejecutable .NET 8 que reemplaza el agente instalado y relanza la tarea programada.
-- Webhook: API ASP.NET Core que recibe eventos cifrados, expone clientes y manifiesto de actualizaciones.
+- Webhook: API ASP.NET Core `net8.0` que recibe eventos cifrados, expone clientes y manifiesto de actualizaciones sin cambiar contratos de endpoint en la migracion LTS.
 - Lambda: funcion Python que descifra, normaliza y crea/actualiza workstations en ManageEngine.
 - Terraform: definicion base de rol IAM, Secrets Manager y Lambda.
 - Azure Pipelines: gates de producto, escaneo de secretos, escaneo NuGet, publish, firma de ejecutables y empaquetado del sitio Webhook.
@@ -54,7 +54,7 @@ Componentes principales:
 | `AutoInventario.csproj` | Proyecto canonico del agente en la raiz. |
 | `Program.cs`, `Helpers/`, `Models/`, `Services/`, `Resources/` | Codigo y recursos del agente Windows. |
 | `AutoInventario.Updater/` | Updater independiente del agente. |
-| `AutoInventario.Tests/` | Proyecto xUnit. Hoy contiene una prueba placeholder. |
+| `AutoInventario.Tests/` | Proyecto xUnit con pruebas minimas reales para recursos embebidos, cifrado y helpers puros. |
 | `Webhook.Tests/` | Tests de seguridad y middleware del Webhook. |
 | `Webhook/` | API ASP.NET Core, pagina de estado, endpoints de clientes y actualizaciones. |
 | `Lambda-Inventario/` | Lambda Python, requirements y script de empaquetado/despliegue. |
@@ -68,7 +68,7 @@ Componentes principales:
 
 - Windows para ejecutar y validar completamente el agente.
 - .NET SDK 8 para agente, updater y tests.
-- .NET SDK/runtime 8 para el Webhook.
+- .NET SDK/runtime 8 para el Webhook, usando `Webhook/Webhook-Inventario.csproj` como proyecto canonico.
 - Python 3.12 para Lambda.
 - Terraform >= 1.5 para infraestructura.
 - AWS CLI configurado para despliegues Lambda/Terraform.
@@ -119,7 +119,6 @@ terraform -chdir=Infraestructura-Terraform validate -no-color
 Pendientes conocidos:
 
 - Tests reales para cifrado, serializacion, updater, endpoints y Lambda.
-- Warnings nullable restantes en el agente.
 
 ## Despliegue
 
@@ -151,6 +150,12 @@ terraform apply
 ```
 
 Revisar [docs/OPERATIONS.md](docs/OPERATIONS.md) antes de desplegar.
+
+## Guias
+
+- Soporte del agente en Windows Server: [docs/AGENT-WINDOWS-SERVER.md](docs/AGENT-WINDOWS-SERVER.md)
+- Posicionamiento comercial self-hosted: [docs/PRODUCT.md](docs/PRODUCT.md)
+- Modelo comercial y pricing: [docs/PRICING-MODEL.md](docs/PRICING-MODEL.md)
 
 ## Seguridad
 

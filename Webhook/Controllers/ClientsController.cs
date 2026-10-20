@@ -4,9 +4,11 @@ using System.Threading.Tasks;
 
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Caching.Memory;
-using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Options;
 
 using Npgsql;
+
+using Webhook.Options;
 
 namespace Webhook.Controllers
 {
@@ -14,12 +16,12 @@ namespace Webhook.Controllers
     [Route("")]
     public class ClientsController : ControllerBase
     {
-        private readonly IConfiguration _config;
+        private readonly IOptions<ConnectionStringsOptions> _connectionStrings;
         private readonly IMemoryCache _cache;
 
-        public ClientsController(IConfiguration config, IMemoryCache cache)
+        public ClientsController(IOptions<ConnectionStringsOptions> connectionStrings, IMemoryCache cache)
         {
-            _config = config;
+            _connectionStrings = connectionStrings;
             _cache = cache;
         }
 
@@ -32,7 +34,7 @@ namespace Webhook.Controllers
                 return Ok(cached);
 
             var clients = new List<object>();
-            string connString = _config.GetConnectionString("Postgres");
+            string connString = _connectionStrings.Value.Postgres;
 
             try
             {

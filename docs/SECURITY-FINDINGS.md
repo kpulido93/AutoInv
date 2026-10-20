@@ -1,53 +1,50 @@
 # Hallazgos de seguridad actuales
 
-Fecha: 2026-05-12
-Alcance: revision AppSec sin correcciones funcionales. No se copiaron ni documentaron valores reales de secretos.
+Fecha: 2026-05-18
+Alcance: revision AppSec del codigo trackeado, configuracion de pipeline y scripts de gate. No se copiaron ni documentaron valores reales de secretos.
 
 ## Criticos
 
-| Ruta | Tipo | Evidencia segura | Recomendacion |
-| --- | --- | --- | --- |
-| `Lambda-Inventario/lambda_function/secrets.json` | Archivo local ignorado con material secreto | Contiene campos de token/API ManageEngine y material de clave privada segun patrones. | Considerar los valores comprometidos si salieron del entorno local, rotarlos y moverlos a AWS Secrets Manager, variables secretas o store seguro. |
-| `Webhook/Resources/private.key` | Archivo local ignorado con clave privada | Detectado por nombre y por material de clave privada. | Eliminar del arbol de trabajo cuando no sea necesario, rotar la clave y cargarla solo desde almacenamiento seguro. |
-| `Webhook/Controllers/WebhookController.cs:58` | Control de acceso deshabilitado | La comparacion de API key esta comentada; `Unauthorized` tambien aparece comentado en la misma rama de control. | Reactivar autenticacion/autorizacion antes de exponer `/webhooks`; agregar pruebas de acceso autorizado y no autorizado. |
+No se confirmaron secretos reales commiteados ni bypasses criticos de autenticacion en el codigo trackeado durante esta auditoria.
+
+Observacion:
+
+- `scripts/ci/Invoke-SecretScan.ps1 -Root .` termino sin indicadores y no hubo archivos `tfstate`, `tfvars`, `pfx/p12` o `secrets.json` versionados en el arbol trackeado.
 
 ## Altos
 
-| Ruta | Tipo | Evidencia segura | Recomendacion |
+| Ruta afectada | Tipo de riesgo | Evidencia segura | Remediacion recomendada |
 | --- | --- | --- | --- |
-| `Webhook/appsettings.json` | Configuracion local sensible | Appsettings ignorado con `AutoInventario.ApiKey` no vacio y ruta de clave privada no vacia; no se imprimieron valores. | Mantener fuera de Git, rotar si fue compartido y documentar variables/secret store para despliegue. |
-| `Webhook/Controllers/WebhookController.cs:56` | Logging de credencial | Se registra la API key recibida, segun patron de logging. | Redactar claves y payloads; registrar solo presencia, hash corto no reversible o correlation id. |
-| `AutoInventario.csproj` | Dependencia vulnerable | `Microsoft.Extensions.Caching.Memory 8.0.0`, gravedad `High`, `GHSA-qj66-m88j-hmgj`. | Actualizar dependencias directas/transitivas y repetir `dotnet list ... --vulnerable`. |
-| `Webhook/Webhook-Inventario.csproj` | Dependencia vulnerable | `System.Text.Json 8.0.0`, gravedad `High`, `GHSA-hh2w-p6rv-4g7w` y `GHSA-8g4q-xg66-9fp4`. | Migrar framework/paquetes hasta una version corregida. |
-| `Webhook/Webhook-Inventario.csproj` | Framework fuera de soporte | `NETSDK1138` por `net6.0`. | Migrar a una version LTS soportada y validar compatibilidad. |
+| `Lambda-Inventario/lambda_function.py` | Exposicion de payload desencriptado y datos operativos en flujo de error | `report_failure_request(...)` envia `workstation` completo, hostname, serial y mensaje de error a un ticket externo; varias respuestas/errores tambien devuelven cuerpos operativos completos. | Redactar payloads, limitar los campos enviados fuera del proceso y sustituir datos sensibles por `correlation_id` o resumenes minimizados. |
 
 ## Medios
 
-| Ruta | Tipo | Evidencia segura | Recomendacion |
+| Ruta afectada | Tipo de riesgo | Evidencia segura | Remediacion recomendada |
 | --- | --- | --- | --- |
-| `Infraestructura-Terraform/secrets.tf` | Archivo Terraform de secretos versionado | Detectado por nombre `secrets.tf` y referencia de secreto. No se imprimieron valores. | Confirmar que solo declara recursos/referencias y no valores reales; si hubo secretos en historial, rotar y limpiar historial. |
-| `InventarioFinal.ps1` | Script local ignorado con referencias sensibles | Detecta asignaciones tipo password y referencias de inventario sensible. | Revisar localmente, eliminar si es obsoleto y evitar copiarlo a artefactos o commits. |
-| `InventarioFinal 1.ps1` | Script local ignorado con referencias sensibles | Detecta asignaciones tipo password y referencias de inventario sensible. | Revisar localmente, eliminar si es obsoleto y evitar copiarlo a artefactos o commits. |
-| `Webhook/appsettings.example.json` | Ejemplo con claves sensibles por nombre | Contiene claves de conexion/API por estructura. | Mantener solo placeholders obvios y validar que no existan valores reales en ejemplos. |
-| `Lambda-Inventario/lambda_function.py` | Referencias a token/API y secretos | El codigo accede a secretos de ManageEngine; no se detecto valor impreso en el reporte. | Mantener el acceso a secretos por gestor externo y redaccion estricta en logs. |
+| `azure-pipelines.yml` | Gate NuGet demasiado permisivo | `NuGetVulnerabilityThreshold` esta configurado en `Critical`, por lo que un advisory `High` futuro no bloquearia CI. | Bajar el umbral a `High` o introducir una excepcion documentada por advisory con vencimiento. |
+| `Webhook/Controllers/WebhookController.cs` | Token de verificacion hard-codeado | La verificacion GET usa `private const string VerifyToken = "YOUR_VERIFY_TOKEN"` en lugar de leer un secret/configuracion externa. | Mover el token a configuracion segura o variable de entorno y agregar pruebas de configuracion ausente/presente. |
+| `Webhook/Services/OfflineLicenseValidator.cs` y `Webhook/appsettings.example.json` | Modo de licencia de desarrollo permisivo si se despliega sin endurecer | `AllowUnsignedDevelopmentLicense` existe y el ejemplo la deja en `true`; la validacion acepta `algorithm=none` para ediciones que no requieren licencia firmada. | Asegurar `false` fuera de desarrollo, validar por entorno en arranque y documentar explicitamente el riesgo operacional. |
+| `Lambda-Inventario/lambda_function.py` | Configuracion sensible y de entorno embebida en codigo | Regiones AWS, bucket, instance ID y URLs externas estan codificadas en el handler. | Mover valores de entorno a variables/secret store y validar su presencia al iniciar. |
+| `Infraestructura-Terraform/main.tf` y `Lambda-Inventario/lambda_function.py` | Deriva entre permisos declarados e integraciones usadas | Terraform concede lectura de un secreto, pero el codigo Lambda usa tambien otro secreto, S3 y SSM. | Revisar permisos IAM reales requeridos, minimizar privilegios y mantener Terraform y codigo alineados. |
 
 ## Bajos
 
-| Ruta | Tipo | Evidencia segura | Recomendacion |
+| Ruta afectada | Tipo de riesgo | Evidencia segura | Remediacion recomendada |
 | --- | --- | --- | --- |
-| `Resources/public.key` | Clave publica versionada | Es una clave publica, no material privado. | Aceptable si forma parte del diseno; documentar rotacion y huella esperada. |
-| `docs/*` y `README.md` | Referencias documentales a secretos | El escaneo amplio detecta palabras clave de secretos en documentacion. | Mantener ejemplos redactados y revisar que nunca incluyan valores reales. |
+| `Infraestructura-Terraform/secrets.tf` | Recurso de secretos versionado sin valores | El archivo define recursos/referencias de secretos, no se observaron valores reales en el contenido auditado. | Mantener solo referencias, nunca valores, y revisar historial si alguna vez se cargaron secretos reales. |
+| `Resources/public.key` | Material criptografico publico versionado | Es una clave publica embebida por diseno; no es material privado. | Aceptable si la rotacion y la huella esperada estan documentadas. |
+| `Webhook.Tests/DecryptionServiceTests.cs` | Fixture criptografico de prueba | El test genera un PEM temporal en runtime; no es una clave privada operativa. | Mantenerlo fuera de escaneos de secreto operativos para evitar falsos positivos. |
 
-## Resultado del escaneo
+## Hallazgos descartados por esta auditoria
 
-- AWS access key id con patron `AKIA`/`ASIA`: no confirmado en el escaneo actual.
-- PFX/P12 versionados: no confirmados en el escaneo actual.
-- `tfvars`/`tfstate` versionados: no confirmados en el escaneo actual.
-- Material privado local confirmado: `Lambda-Inventario/lambda_function/secrets.json` y `Webhook/Resources/private.key`.
+- `AutoInventario.csproj` ya no reporta advisories NuGet activos tras actualizar `Npgsql.EntityFrameworkCore.PostgreSQL` a `8.0.11` y repetir `dotnet list ... --vulnerable --include-transitive`.
+- `Webhook.Services.ApiKeyMiddleware` si esta activo en `Startup` y protege `/webhooks` y `/id-clients`.
+- `Webhook/Webhook-Inventario.csproj` ya apunta a `net8.0` y el scan NuGet actual no reporta advisories activos.
+- `Webhook/appsettings.example.json`, `.env.example` y la documentacion auditada contienen placeholders o nombres de variables, no secretos reales.
 
 ## Reglas de manejo
 
 - No publicar ni copiar valores reales en issues, PRs, logs o reportes.
-- Rotar cualquier secreto que haya sido commiteado, compartido o usado fuera del entorno seguro.
+- Rotar cualquier secreto que haya sido commiteado, compartido o usado fuera de almacenamiento seguro.
 - Usar AWS Secrets Manager, Azure DevOps secret variables, Secure Files, variables de entorno locales o store seguro del sistema.
-- Agregar una puerta de CI/pre-commit con deteccion de secretos despues de limpiar los hallazgos actuales.
+- Mantener deteccion de secretos en CI y, cuando sea posible, instalar `gitleaks` tambien en entornos locales.

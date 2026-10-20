@@ -36,7 +36,7 @@ namespace AutoInventario
                 {
                     intentos++;
                     string url = $"{Program.Url}/id-clients";
-                    LoggerService.Log($"Cargando clientes desde {url} (intento {intentos})");
+                    LoggerService.Log($"Cargando lista de clientes (intento {intentos})");
 
                     string json = await _http.GetStringAsync(url);
                     var clients = JsonSerializer.Deserialize<ClientInfo[]>(json) ?? [];
@@ -86,11 +86,11 @@ namespace AutoInventario
 
                 // Crear tarea programada
                 TaskSchedulerHelper.CreateStartupTask("AutoInventario", targetPath, $"-client_id {clientId}");
-                LoggerService.Log($"Configuración guardada para client_id={clientId}");
+                LoggerService.Log("Configuración guardada correctamente.");
 
                 // Ejecutar inventario inicial
                 await InventoryService.ExecuteAsync(clientId, Program.WebhookUrl);
-                LoggerService.Log($"Inventario ejecutado para client_id={clientId}");
+                LoggerService.Log("Inventario ejecutado correctamente.");
 
                 MessageBox.Show("✅ Configuración guardada correctamente.", "AutoInventario",
                                 MessageBoxButtons.OK, MessageBoxIcon.Information);

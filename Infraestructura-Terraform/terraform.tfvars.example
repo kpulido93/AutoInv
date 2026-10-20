@@ -1,3 +1,5 @@
+# Example values only. Replace CHANGE_ME placeholders before running plan/apply.
 aws_region           = "us-east-1"
-lambda_function_name = "LambdaInventario"
-secrets_manager_name = "autoinventario/private_key"
+lambda_function_name = "CHANGE_ME_LAMBDA_FUNCTION_NAME"
+secrets_manager_name = "CHANGE_ME_SECRETS_MANAGER_SECRET_NAME"
+lambda_package_path  = "lambda_package.zip"

@@ -1,12 +1,13 @@
 using System;
 using System.Threading.Tasks;
-using Microsoft.Extensions.Configuration;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 using Models;
 
 using Services;
+using Webhook.Options;
 using Webhook.Services;
 
 namespace Controllers
@@ -15,10 +16,10 @@ namespace Controllers
     [Route("webhooks")]
     public class WebhookController : ControllerBase
     {
-        private const string VerifyToken = "YOUR_VERIFY_TOKEN";
         private readonly EventStore _eventStore;
         private readonly IInventoryProcessor _inventoryProcessor;
         private readonly IDecryptionService _decryptionService;
+        private readonly IOptions<AutoInventarioOptions> _options;
         private readonly ILogger<WebhookController> _logger;
 
         public WebhookController(
@@ -26,11 +27,12 @@ namespace Controllers
             IInventoryProcessor inventoryProcessor,
             IDecryptionService decryptionService,
             ILogger<WebhookController> logger,
-            IConfiguration config)
+            IOptions<AutoInventarioOptions> options)
         {
             _eventStore = eventStore;
             _inventoryProcessor = inventoryProcessor;
             _decryptionService = decryptionService;
+            _options = options;
             _logger = logger;
         }
 
@@ -44,7 +46,7 @@ namespace Controllers
                 hub_mode,
                 !string.IsNullOrWhiteSpace(hub_verify_token));
 
-            if (hub_mode == "subscribe" && hub_verify_token == VerifyToken)
+            if (hub_mode == "subscribe" && hub_verify_token == _options.Value.VerifyToken)
             {
                 _logger.LogInformation("Token verificado correctamente.");
                 return Ok(hub_challenge);

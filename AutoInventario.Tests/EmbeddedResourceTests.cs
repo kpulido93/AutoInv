@@ -1,6 +1,6 @@
-﻿namespace AutoInventario.Tests;
+namespace AutoInventario.Tests;
 
-public class UnitTest1
+public class EmbeddedResourceTests
 {
     [Fact]
     public void Agent_project_embeds_public_key()
